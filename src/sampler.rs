@@ -18,8 +18,8 @@ impl Sampler {
     }
 
     pub fn set_max_weight(&mut self, max_weight: usize) {
-        assert!(max_weight > 0, "Max weight must be positive");
-        assert!(
+        debug_assert!(max_weight > 0, "Max weight must be positive");
+        debug_assert!(
             self.weight == 0,
             "Cannot max weight if already storing value"
         );
@@ -31,7 +31,7 @@ impl Sampler {
     }
 
     pub fn sample_weighted(&mut self, val: u64, weight: usize) -> Option<u64> {
-        assert!(
+        debug_assert!(
             weight <= self.max_weight,
             "Item weight must be <= max weight"
         );
@@ -75,7 +75,7 @@ impl Sampler {
         self.val = lighter_val;
 
         // output with probability = (heavier_weight / self.max_weight)
-        assert!(heavier_weight <= self.max_weight);
+        debug_assert!(heavier_weight <= self.max_weight);
         let cutoff = (usize::max_value() / self.max_weight) * heavier_weight;
         let r = self.generator.next_u64() as usize;
         if r <= cutoff {
