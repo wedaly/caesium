@@ -1,9 +1,10 @@
-use rand;
+use rand::{Rng, XorShiftRng, weak_rng};
 
 pub struct Sampler {
     count: usize,
     group_size: usize, // Sample one item out of every group
     reservoir: u64,
+    generator: XorShiftRng
 }
 
 impl Sampler {
@@ -12,6 +13,7 @@ impl Sampler {
             count: 0,
             group_size: 1,
             reservoir: 0,
+            generator: weak_rng(),
         }
     }
 
@@ -28,7 +30,7 @@ impl Sampler {
         self.count += 1;
 
         let cutoff = usize::max_value() / self.count;
-        let r = rand::random::<usize>();
+        let r = self.generator.next_u64() as usize;
         if r <= cutoff {
             self.reservoir = val;
         }
