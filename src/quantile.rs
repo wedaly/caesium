@@ -95,7 +95,7 @@ impl QuantileSketch {
         let denominator = (BUFSIZE * (1 << (BUFCOUNT - 2))) as f64;
         let result = (numerator / denominator).log2().ceil() as i64;
         self.active_level = cmp::max(0, result) as usize;
-        self.sampler.set_group_size(1 << self.active_level);
+        self.sampler.set_max_weight(1 << self.active_level);
     }
 
     fn insert_empty_buffer(&mut self, idx: usize, val: u64) {
