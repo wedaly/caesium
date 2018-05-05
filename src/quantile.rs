@@ -3,8 +3,8 @@ use rand;
 use std::cmp;
 
 // for epsilon = 0.01
-const BUFCOUNT: usize = 8; // log(1/epsilon) + 1
-const BUFSIZE: usize = 256; // (1/epsilon) * sqrt(log(1/epsilon))
+pub const BUFCOUNT: usize = 8; // log(1/epsilon) + 1
+pub const BUFSIZE: usize = 256; // (1/epsilon) * sqrt(log(1/epsilon))
 
 #[derive(Copy, Clone)]
 enum BufState {

@@ -5,3 +5,8 @@ authors = ["Will Daly"]
 
 [dependencies]
 rand = "0.4"
+bencher = "0.1.5"
+
+[[bench]]
+name = "quantile"
+harness = false
