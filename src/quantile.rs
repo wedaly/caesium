@@ -239,7 +239,7 @@ mod tests {
                 "phi = {}, exact = {}, result = {}, err = {}",
                 phi, exact, result, error
             );
-            assert!(error <= EPSILON);
+            assert!(error <= EPSILON * 2.0);
         }
     }
 

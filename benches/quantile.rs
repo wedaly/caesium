@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate bencher;
-extern crate rand;
 extern crate caesium;
+extern crate rand;
 
 use bencher::Bencher;
 use rand::Rng;
@@ -16,7 +16,9 @@ fn bench_insert_no_merge(bench: &mut Bencher) {
     }
     let mut rng = rand::thread_rng();
     rng.shuffle(&mut input);
-    bench.iter(|| { input.iter().for_each(|v| q.insert(*v)); })
+    bench.iter(|| {
+        input.iter().for_each(|v| q.insert(*v));
+    })
 }
 
 fn bench_insert_with_merge(bench: &mut Bencher) {
@@ -35,7 +37,9 @@ fn bench_insert_with_merge(bench: &mut Bencher) {
     }
     let mut rng = rand::thread_rng();
     rng.shuffle(&mut input);
-    bench.iter(|| { input.iter().for_each(|v| q.insert(*v)); })
+    bench.iter(|| {
+        input.iter().for_each(|v| q.insert(*v));
+    })
 }
 
 fn bench_query_small_sketch(bench: &mut Bencher) {
