@@ -4,8 +4,8 @@ extern crate caesium;
 extern crate rand;
 
 use bencher::Bencher;
-use rand::Rng;
 use caesium::quantile::{QuantileSketch, BUFCOUNT, BUFSIZE};
+use rand::Rng;
 
 fn bench_insert_no_merge(bench: &mut Bencher) {
     let mut q = QuantileSketch::new();

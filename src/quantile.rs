@@ -1,5 +1,5 @@
-use sampler::Sampler;
 use rand;
+use sampler::Sampler;
 use std::cmp;
 
 // for epsilon = 0.01
