@@ -77,13 +77,31 @@ fn bench_query_small_sketch(bench: &mut Bencher) {
     bench.iter(|| q.query(0.5))
 }
 
-fn bench_query_full_sketch(bench: &mut Bencher) {
+fn bench_query_full_sketch_one_tenth(bench: &mut Bencher) {
+    let mut q = QuantileSketch::new();
+    let n = BUFCOUNT * BUFSIZE;
+    for v in 0..n {
+        q.insert(v as u64);
+    }
+    bench.iter(|| q.query(0.1))
+}
+
+fn bench_query_full_sketch_median(bench: &mut Bencher) {
     let mut q = QuantileSketch::new();
     let n = BUFCOUNT * BUFSIZE;
     for v in 0..n {
         q.insert(v as u64);
     }
     bench.iter(|| q.query(0.5))
+}
+
+fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
+    let mut q = QuantileSketch::new();
+    let n = BUFCOUNT * BUFSIZE;
+    for v in 0..n {
+        q.insert(v as u64);
+    }
+    bench.iter(|| q.query(0.9))
 }
 
 benchmark_group!(
@@ -94,6 +112,8 @@ benchmark_group!(
     bench_insert_many_no_merge,
     bench_insert_many_with_merge,
     bench_query_small_sketch,
-    bench_query_full_sketch
+    bench_query_full_sketch_one_tenth,
+    bench_query_full_sketch_median,
+    bench_query_full_sketch_nine_tenths
 );
 benchmark_main!(benches);

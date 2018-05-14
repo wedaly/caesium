@@ -2,7 +2,7 @@ use rand;
 use sampler::Sampler;
 use std::cmp;
 
-// for epsilon = 0.01
+pub const EPSILON: f64 = 0.01;
 pub const BUFCOUNT: usize = 8; // log(1/epsilon) + 1
 pub const BUFSIZE: usize = 256; // (1/epsilon) * sqrt(log(1/epsilon))
 
@@ -52,42 +52,57 @@ impl QuantileSketch {
 
     pub fn query(&self, phi: f64) -> Option<u64> {
         assert!(0.0 < phi && phi < 1.0);
+        let error_bound = EPSILON * self.count as f64;
+        let mut closest: Option<(f64, u64)> = None;
+        let mut rank = 0;
 
-        let mut tmp = Vec::new();
+        let reverse = phi > 0.5;
+        let target_phi = if reverse { (1.0 - phi) } else { phi };
+        let target = target_phi * self.count as f64;
+
+        for (val, weight) in self.sorted_values_and_weights(reverse) {
+            rank += weight;
+            let error = (rank as f64 - target).abs();
+            if error < error_bound {
+                return Some(val);
+            }
+
+            if let Some((old_error, _)) = closest {
+                if error < old_error {
+                    closest = Some((error, val));
+                }
+            }
+        }
+        closest.map(|(_, val)| val)
+    }
+
+    fn sorted_values_and_weights(&self, reverse: bool) -> Vec<(u64, usize)> {
+        let mut result = Vec::with_capacity(BUFSIZE * BUFCOUNT);
         for (values, state) in self.buffers.iter().zip(self.bufstate.iter()) {
             match *state {
                 BufState::Empty => {}
                 BufState::Filling { level, len } => {
                     let weight = 1 << level;
                     let item_iter = values.iter().take(len).map(|v| (*v, weight));
-                    tmp.extend(item_iter);
+                    result.extend(item_iter);
                 }
                 BufState::Full { level } => {
                     let weight = 1 << level;
                     let item_iter = values.iter().map(|v| (*v, weight));
-                    tmp.extend(item_iter);
+                    result.extend(item_iter);
                 }
             }
         }
 
-        let target = phi * self.count as f64;
-        tmp.sort_by_key(|&(val, _)| val);
-        tmp.iter()
-            .scan(0, |rank, &(val, weight)| {
-                *rank = *rank + weight;
-                Some((*rank, val))
-            })
-            .fold(None, |closest, (rank, val)| match closest {
-                None => Some((rank, val)),
-                Some((old_rank, old_val)) => {
-                    if (rank as f64 - target).abs() < (old_rank as f64 - target).abs() {
-                        Some((rank, val))
-                    } else {
-                        Some((old_rank, old_val))
-                    }
-                }
-            })
-            .map(|(_, val)| val)
+        result.sort_unstable_by(|(v1, _), (v2, _)| {
+            let ordering = v1.cmp(v2);
+            if reverse {
+                ordering.reverse()
+            } else {
+                ordering
+            }
+        });
+        result
     }
 
     fn update_active_level(&mut self) {
@@ -219,8 +234,6 @@ impl QuantileSketch {
 mod tests {
     use super::*;
     use rand::Rng;
-
-    const EPSILON: f64 = 0.01;
 
     fn check_error_bound(input: Vec<u64>) {
         let mut q = QuantileSketch::new();
