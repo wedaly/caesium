@@ -56,11 +56,15 @@ impl QuantileSketch {
         let mut closest: Option<(f64, u64)> = None;
         let mut rank = 0;
 
+        let mut sorted_items = self.sorted_values_and_weights();
         let reverse = phi > 0.5;
+        if reverse {
+            sorted_items.reverse();
+        }
         let target_phi = if reverse { (1.0 - phi) } else { phi };
         let target = target_phi * self.count as f64;
 
-        for (val, weight) in self.sorted_values_and_weights(reverse) {
+        for (val, weight) in sorted_items {
             rank += weight;
             let error = (rank as f64 - target).abs();
             if error < error_bound {
@@ -76,7 +80,7 @@ impl QuantileSketch {
         closest.map(|(_, val)| val)
     }
 
-    fn sorted_values_and_weights(&self, reverse: bool) -> Vec<(u64, usize)> {
+    fn sorted_values_and_weights(&self) -> Vec<(u64, usize)> {
         let mut result = Vec::with_capacity(BUFSIZE * BUFCOUNT);
         for (values, state) in self.buffers.iter().zip(self.bufstate.iter()) {
             match *state {
@@ -94,14 +98,7 @@ impl QuantileSketch {
             }
         }
 
-        result.sort_unstable_by(|(v1, _), (v2, _)| {
-            let ordering = v1.cmp(v2);
-            if reverse {
-                ordering.reverse()
-            } else {
-                ordering
-            }
-        });
+        result.sort_unstable_by_key(|&(val, _)| val);
         result
     }
 
