@@ -181,7 +181,7 @@ impl QuantileSketch {
         let bs1 = self.bufstate[b1];
         let bs2 = self.bufstate[b2];
         if let (BufState::Full { level: l1 }, BufState::Full { level: l2 }) = (bs1, bs2) {
-            assert!(l1 == l2, "Cannot merge buffers at different levels");
+            debug_assert!(l1 == l2, "Cannot merge buffers at different levels");
             let mut tmp = [0; BUFSIZE * 2];
             QuantileSketch::concat_buffers(&self.buffers[b1], &self.buffers[b2], &mut tmp);
             QuantileSketch::compact_into(&mut tmp, &mut self.buffers[b1]);
