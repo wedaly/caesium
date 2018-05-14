@@ -183,16 +183,8 @@ impl QuantileSketch {
         if let (BufState::Full { level: l1 }, BufState::Full { level: l2 }) = (bs1, bs2) {
             assert!(l1 == l2, "Cannot merge buffers at different levels");
             let mut tmp = [0; BUFSIZE * 2];
-            self.concat_buffers(b1, b2, &mut tmp);
-            tmp.sort();
-
-            let r = rand::random::<bool>();
-            tmp.iter()
-                .enumerate()
-                .filter_map(|(idx, val)| if r == (idx % 2 == 0) { Some(val) } else { None })
-                .enumerate()
-                .for_each(|(idx, val)| self.buffers[b1][idx] = *val);
-
+            QuantileSketch::concat_buffers(&self.buffers[b1], &self.buffers[b2], &mut tmp);
+            QuantileSketch::compact_into(&mut tmp, &mut self.buffers[b1]);
             self.bufstate[b1] = BufState::Full { level: l1 + 1 };
             self.bufstate[b2] = BufState::Empty;
             b2
@@ -201,13 +193,25 @@ impl QuantileSketch {
         }
     }
 
-    fn concat_buffers(&self, b1: usize, b2: usize, out: &mut [u64; BUFSIZE * 2]) {
-        for (idx, val) in self.buffers[b1].iter().enumerate() {
+    fn concat_buffers(b1: &[u64], b2: &[u64], out: &mut [u64]) {
+        debug_assert!(out.len() >= b1.len() + b2.len());
+        for (idx, val) in b1.iter().enumerate() {
             out[idx] = *val;
         }
-        for (idx, val) in self.buffers[b2].iter().enumerate() {
+        for (idx, val) in b2.iter().enumerate() {
             out[idx + BUFSIZE] = *val;
         }
+    }
+
+    fn compact_into(b: &mut [u64], out: &mut [u64]) {
+        debug_assert!(out.len() >= b.len() / 2);
+        b.sort();
+        let r = rand::random::<bool>();
+        b.iter()
+            .enumerate()
+            .filter_map(|(idx, val)| if r == (idx % 2 == 0) { Some(val) } else { None })
+            .enumerate()
+            .for_each(|(idx, val)| out[idx] = *val);
     }
 }
 
