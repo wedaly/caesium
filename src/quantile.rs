@@ -56,12 +56,16 @@ impl QuantileSketch {
         let mut closest: Option<(f64, u64)> = None;
         let mut rank = 0;
 
+        // Descending by value
         let mut sorted_items = self.sorted_values_and_weights();
-        let reverse = phi > 0.5;
-        if reverse {
+
+        // Algorithm terminates early once it finds a value in the error bounds
+        // so if phi < 0.5 we reverse the order and search for (1 - phi)
+        // to find the quantile sooner.
+        if phi < 0.5 {
             sorted_items.reverse();
         }
-        let target_phi = if reverse { (1.0 - phi) } else { phi };
+        let target_phi = if phi > 0.5 { (1.0 - phi) } else { phi };
         let target = target_phi * self.count as f64;
 
         for (val, weight) in sorted_items {
@@ -98,7 +102,8 @@ impl QuantileSketch {
             }
         }
 
-        result.sort_unstable_by_key(|&(val, _)| val);
+        // Descending by value
+        result.sort_unstable_by_key(|&(val, _)| u64::max_value() - val);
         result
     }
 
