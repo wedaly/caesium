@@ -10,3 +10,6 @@ bencher = "0.1.5"
 [[bench]]
 name = "quantile"
 harness = false
+
+[profile.release]
+debug = true

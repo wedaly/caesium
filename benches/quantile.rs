@@ -7,7 +7,36 @@ use bencher::Bencher;
 use caesium::quantile::{QuantileSketch, BUFCOUNT, BUFSIZE};
 use rand::Rng;
 
-fn bench_insert_no_merge(bench: &mut Bencher) {
+fn bench_insert_one_empty(bench: &mut Bencher) {
+    let mut q = QuantileSketch::new();
+    bench.iter(|| {
+        q.insert(1);
+    })
+}
+
+fn bench_insert_one_full(bench: &mut Bencher) {
+    let mut q = QuantileSketch::new();
+    let n = BUFSIZE;
+    for v in 0..n {
+        q.insert(v as u64);
+    }
+    bench.iter(|| {
+        q.insert(1);
+    })
+}
+
+fn bench_insert_one_merge(bench: &mut Bencher) {
+    let mut q = QuantileSketch::new();
+    let n = BUFCOUNT * BUFSIZE;
+    for v in 0..n {
+        q.insert(v as u64);
+    }
+    bench.iter(|| {
+        q.insert(1);
+    })
+}
+
+fn bench_insert_many_no_merge(bench: &mut Bencher) {
     let mut q = QuantileSketch::new();
     let n = BUFCOUNT * BUFSIZE;
     let mut input: Vec<u64> = Vec::with_capacity(n);
@@ -21,7 +50,7 @@ fn bench_insert_no_merge(bench: &mut Bencher) {
     })
 }
 
-fn bench_insert_with_merge(bench: &mut Bencher) {
+fn bench_insert_many_with_merge(bench: &mut Bencher) {
     let mut q = QuantileSketch::new();
     let n = BUFCOUNT * BUFSIZE;
 
@@ -59,8 +88,11 @@ fn bench_query_full_sketch(bench: &mut Bencher) {
 
 benchmark_group!(
     benches,
-    bench_insert_no_merge,
-    bench_insert_with_merge,
+    bench_insert_one_empty,
+    bench_insert_one_full,
+    bench_insert_one_merge,
+    bench_insert_many_no_merge,
+    bench_insert_many_with_merge,
     bench_query_small_sketch,
     bench_query_full_sketch
 );
