@@ -1,4 +1,4 @@
-use quantile::sketch::{Sketch, BUFCOUNT, BUFSIZE, EPSILON};
+use quantile::sketch::{Sketch, BUFCOUNT, BUFSIZE};
 use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
 use std::iter::Iterator;
 
