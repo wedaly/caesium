@@ -59,11 +59,6 @@ impl Sketch {
         debug_assert!(idx < BUFCOUNT);
         &mut self.buffers[idx]
     }
-
-    pub fn count(&self) -> usize {
-        // 2 ** level = weight (# of items represented in source data stream)
-        self.buffers.iter().map(|b| (1 << b.level) * b.len).sum()
-    }
 }
 
 #[cfg(test)]
