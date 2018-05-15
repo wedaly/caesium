@@ -20,6 +20,11 @@ impl Buffer {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.len = 0;
+        self.level = 0;
+    }
+
     pub fn set(&mut self, level: usize, values: &[u64]) {
         debug_assert!(values.len() <= BUFSIZE);
         self.level = level;
@@ -38,6 +43,10 @@ impl Buffer {
     pub fn values(&self) -> &[u64] {
         &self.slots[..self.len]
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 }
 
 pub struct Sketch {
@@ -51,8 +60,19 @@ impl Sketch {
         }
     }
 
+    pub fn reset(&mut self) {
+        for b in self.buffers.iter_mut() {
+            b.reset()
+        }
+    }
+
     pub fn buffer_iter(&self) -> Iter<Buffer> {
         self.buffers.iter()
+    }
+
+    pub fn buffer(&self, idx: usize) -> &Buffer {
+        debug_assert!(idx < BUFCOUNT);
+        &self.buffers[idx]
     }
 
     pub fn buffer_mut(&mut self, idx: usize) -> &mut Buffer {

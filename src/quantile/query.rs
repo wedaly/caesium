@@ -27,8 +27,8 @@ impl PartialEq for RankedValue {
 }
 
 pub struct SketchQuery {
-    count: usize, // num items from the source data stream
-    items: Vec<RankedValue>,  // sorted asc by value
+    count: usize,            // num items from the source data stream
+    items: Vec<RankedValue>, // sorted asc by value
 }
 
 impl SketchQuery {
@@ -56,7 +56,7 @@ impl SketchQuery {
             } else if target > rank {
                 start = mid;
             } else {
-                return Some(self.items[mid].value)
+                return Some(self.items[mid].value);
             }
         }
         if end - start == 1 {
@@ -73,7 +73,7 @@ impl SketchQuery {
             for value in b.values() {
                 items.push(RankedValue {
                     value: *value,
-                    rank: weight,  // store the weight here for now to avoid extra allocation
+                    rank: weight, // store the weight here for now to avoid extra allocation
                 })
             }
         }
@@ -81,7 +81,7 @@ impl SketchQuery {
 
         let mut rank = 0;
         for x in items.iter_mut() {
-            let weight = x.rank;  // stored weight from earlier
+            let weight = x.rank; // stored weight from earlier
             x.rank = rank;
             rank += weight;
         }

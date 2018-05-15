@@ -7,6 +7,7 @@ pub mod sketch;
 #[cfg(test)]
 mod tests {
     use super::builder::SketchBuilder;
+    use super::merge::SketchMerger;
     use super::query::SketchQuery;
     use super::sketch::{Sketch, BUFCOUNT, BUFSIZE, EPSILON};
     use rand;
@@ -24,37 +25,70 @@ mod tests {
     #[test]
     fn it_handles_small_distinct_ordered_input() {
         let input = sequential_values(BUFSIZE * BUFCOUNT);
-        check_error_bound(input);
+        let s = build_sketch(&input);
+        check_error_bound(&s, &input);
     }
 
     #[test]
     fn it_handles_small_distinct_unordered_input() {
         let input = random_distinct_values(BUFSIZE * BUFCOUNT);
-        check_error_bound(input);
+        let s = build_sketch(&input);
+        check_error_bound(&s, &input);
     }
 
     #[test]
     fn it_handles_small_input_with_duplicates() {
         let input = random_duplicate_values(BUFSIZE * BUFCOUNT);
-        check_error_bound(input);
+        let s = build_sketch(&input);
+        check_error_bound(&s, &input);
     }
 
     #[test]
     fn it_handles_large_distinct_ordered_input() {
         let input = sequential_values(BUFSIZE * BUFCOUNT * 100);
-        check_error_bound(input);
+        let s = build_sketch(&input);
+        check_error_bound(&s, &input);
     }
 
     #[test]
     fn it_handles_large_distinct_unordered_input() {
         let input = random_distinct_values(BUFSIZE * BUFCOUNT * 100);
-        check_error_bound(input);
+        let s = build_sketch(&input);
+        check_error_bound(&s, &input);
     }
 
     #[test]
     fn it_handles_large_input_with_duplicates() {
         let input = random_duplicate_values(BUFSIZE * BUFCOUNT * 100);
-        check_error_bound(input);
+        let s = build_sketch(&input);
+        check_error_bound(&s, &input);
+    }
+
+    #[test]
+    fn it_merges_two_sketches_without_increasing_error() {
+        let n = BUFSIZE * BUFCOUNT * 2;
+        let input = random_distinct_values(n);
+        let s1 = build_sketch(&input[..n / 2]);
+        let s2 = build_sketch(&input[n / 2..n]);
+        let mut m = SketchMerger::new();
+        let s = m.merge(s1, s2);
+        check_error_bound(&s, &input);
+    }
+
+    #[test]
+    fn it_merges_many_sketches_without_increasing_error() {
+        let sketch_size = BUFSIZE * BUFCOUNT;
+        let num_sketches = 100;
+        let input = random_distinct_values(sketch_size * num_sketches);
+        let mut m = SketchMerger::new();
+        let mut s = build_sketch(&input[..sketch_size]);
+        for i in 1..num_sketches {
+            let start = i * sketch_size;
+            let end = start + sketch_size;
+            let new_sketch = build_sketch(&input[start..end]);
+            s = m.merge(s, new_sketch);
+        }
+        check_error_bound(&s, &input);
     }
 
     fn sequential_values(n: usize) -> Vec<u64> {
@@ -78,7 +112,7 @@ mod tests {
 
     fn random_duplicate_values(n: usize) -> Vec<u64> {
         let mut result: Vec<u64> = Vec::with_capacity(n);
-        for v in 0..n/2 {
+        for v in 0..n / 2 {
             result.push(v as u64);
             result.push(v as u64);
         }
@@ -88,17 +122,21 @@ mod tests {
         result
     }
 
-    fn check_error_bound(input: Vec<u64>) {
+    fn build_sketch(input: &[u64]) -> Sketch {
         let mut sketch = Sketch::new();
         let mut builder = SketchBuilder::new();
-        let n = input.len();
         for v in input.iter() {
             builder.insert(*v);
         }
         builder.build(&mut sketch);
-        let q = SketchQuery::new(&sketch);
+        sketch
+    }
 
-        let mut sorted = input.clone();
+    fn check_error_bound(s: &Sketch, input: &[u64]) {
+        let q = SketchQuery::new(s);
+        let n = input.len();
+        let mut sorted = Vec::with_capacity(input.len());
+        sorted.extend_from_slice(input);
         sorted.sort();
         for i in 1..10 {
             let phi = i as f64 / 10.0;
