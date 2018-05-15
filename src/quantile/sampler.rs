@@ -19,6 +19,12 @@ impl Sampler {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.count = 0;
+        self.sample_idx = 0;
+        self.max_weight = 1;
+    }
+
     pub fn set_max_weight(&mut self, max_weight: usize) {
         debug_assert!(max_weight > 0, "Max weight must be positive");
         self.max_weight = max_weight;
