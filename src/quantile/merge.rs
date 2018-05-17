@@ -5,18 +5,16 @@ use std::collections::BinaryHeap;
 
 struct HeapItem {
     level: usize,
-    len: usize,
-    values: [u64; BUFSIZE],
+    values: Vec<u64>,
 }
 
 impl HeapItem {
     fn new(b: &Buffer) -> HeapItem {
         debug_assert!(b.len() > 0);
-        let mut v = [0; BUFSIZE];
-        v[..b.len()].copy_from_slice(b.values());
+        let mut v = Vec::with_capacity(b.len());
+        v.extend_from_slice(b.values());
         HeapItem {
             level: b.level(),
-            len: b.len(),
             values: v,
         }
     }
@@ -77,7 +75,7 @@ impl SketchMerger {
                 if head.level < next.level {
                     self.heap.push(SketchMerger::compact_one(head));
                 } else {
-                    if head.len + next.len > BUFSIZE {
+                    if head.values.len() + next.values.len() > BUFSIZE {
                         self.heap.push(SketchMerger::compact_two(head, next));
                     } else {
                         self.heap.push(SketchMerger::concat_two(head, next));
@@ -92,47 +90,42 @@ impl SketchMerger {
         s.reset();
         for (idx, item) in self.heap.iter().enumerate() {
             let b = s.buffer_mut(idx);
-            b.set(item.level, &item.values[..item.len]);
+            b.set(item.level, &item.values);
         }
     }
 
     fn compact_one(mut x: HeapItem) -> HeapItem {
-        x.len = SketchMerger::compact_slice(&mut x.values[..x.len]);
+        SketchMerger::compact_vec(&mut x.values);
         x.level += 1;
         x
     }
 
     fn compact_two(mut x: HeapItem, y: HeapItem) -> HeapItem {
-        let mut tmp = [0; BUFSIZE * 2];
-        let n = x.len + y.len;
-        tmp[0..x.len].copy_from_slice(&x.values[..x.len]);
-        tmp[x.len..n].copy_from_slice(&y.values[..y.len]);
-        let len = SketchMerger::compact_slice(&mut tmp[..n]);
-        x.values[0..len].copy_from_slice(&tmp[..len]);
-        x.len = len;
+        let mut tmp = Vec::with_capacity(BUFSIZE * 2);
+        tmp.extend_from_slice(&x.values);
+        tmp.extend_from_slice(&y.values);
+        SketchMerger::compact_vec(&mut tmp);
+        x.values.clear();
+        x.values.extend_from_slice(&tmp);
         x.level += 1;
         x
     }
 
-    fn compact_slice(s: &mut [u64]) -> usize {
+    fn compact_vec(v: &mut Vec<u64>) {
         let r = rand::random::<bool>();
-        let n = s.len();
-        s.sort_unstable();
+        let n = v.len();
+        v.sort_unstable();
         for idx in 0..n {
             if r == ((idx % 2) == 0) {
-                s[idx / 2] = s[idx];
+                v[idx / 2] = v[idx];
             }
         }
-        n / 2
+        v.truncate(n / 2);
     }
 
-    fn concat_two(x: HeapItem, y: HeapItem) -> HeapItem {
-        let (src, mut dst) = if x.len < y.len { (x, y) } else { (y, x) };
-        let start = dst.len;
-        let end = dst.len + src.len;
-        dst.values[start..end].copy_from_slice(&src.values[..src.len]);
-        dst.len += src.len;
-        dst
+    fn concat_two(mut x: HeapItem, y: HeapItem) -> HeapItem {
+        x.values.extend_from_slice(&y.values);
+        x
     }
 }
 
@@ -197,11 +190,10 @@ mod tests {
         let item = build_heap_item(level, BUFSIZE);
         let result = SketchMerger::compact_one(item);
         assert_eq!(result.level, level + 1);
-        assert_eq!(result.len, BUFSIZE / 2);
-        let values = &result.values[..result.len];
-        match values.first() {
-            Some(&v) if v == 0 => assert_evens(&values),
-            Some(&v) if v == 1 => assert_odds(&values),
+        assert_eq!(result.values.len(), BUFSIZE / 2);
+        match result.values.first() {
+            Some(&v) if v == 0 => assert_evens(&result.values),
+            Some(&v) if v == 1 => assert_odds(&result.values),
             Some(_) => panic!("First item does not have expected value!"),
             None => panic!("No first item found!"),
         }
@@ -214,8 +206,8 @@ mod tests {
         let y = build_heap_item(level, BUFSIZE);
         let result = SketchMerger::compact_two(x, y);
         assert_eq!(result.level, level + 1);
-        assert_eq!(result.len, BUFSIZE);
-        assert_sequential(&result.values[..result.len]);
+        assert_eq!(result.values.len(), BUFSIZE);
+        assert_sequential(&result.values);
     }
 
     #[test]
@@ -225,9 +217,10 @@ mod tests {
         let y = build_heap_item(level, BUFSIZE / 2);
         let result = SketchMerger::concat_two(x, y);
         assert_eq!(result.level, level);
-        assert_eq!(result.len, BUFSIZE);
-        assert_sequential(&result.values[..result.len / 2]);
-        assert_sequential(&result.values[result.len / 2..result.len]);
+        assert_eq!(result.values.len(), BUFSIZE);
+        let midpoint = result.values.len() / 2;
+        assert_sequential(&result.values[..midpoint]);
+        assert_sequential(&result.values[midpoint..]);
     }
 
     fn build_sketch(levels: &[usize]) -> Sketch {

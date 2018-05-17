@@ -220,7 +220,7 @@ mod tests {
 
         match b.bufstate[idx] {
             BufState::Empty => (), // pass
-            _ => panic!("Expected empty buffer")
+            _ => panic!("Expected empty buffer"),
         }
     }
 }
