@@ -5,6 +5,7 @@ extern crate rand;
 
 use bencher::Bencher;
 use caesium::quantile::builder::SketchBuilder;
+use caesium::quantile::merge::SketchMerger;
 use caesium::quantile::query::SketchQuery;
 use caesium::quantile::sketch::{Sketch, BUFCOUNT, BUFSIZE};
 use rand::Rng;
@@ -110,6 +111,34 @@ fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
     bench.iter(|| q.query(0.9))
 }
 
+fn bench_merge_two_sketches(bench: &mut Bencher) {
+    let mut b = SketchBuilder::new();
+    insert_sequential(&mut b, BUFSIZE * BUFCOUNT);
+    let mut m = SketchMerger::new();
+    bench.iter(|| {
+        let mut s1 = Sketch::new();
+        let mut s2 = Sketch::new();
+        b.build(&mut s1);
+        b.build(&mut s2);
+        m.merge(s1, s2)
+    })
+}
+
+fn bench_merge_many_sketches(bench: &mut Bencher) {
+    let mut b = SketchBuilder::new();
+    insert_sequential(&mut b, BUFSIZE * BUFCOUNT);
+    let mut m = SketchMerger::new();
+    bench.iter(|| {
+        let mut s = Sketch::new();
+        b.build(&mut s);
+        for _ in 0..100 {
+            let mut new_sketch = Sketch::new();
+            b.build(&mut new_sketch);
+            s = m.merge(s, new_sketch)
+        }
+    })
+}
+
 benchmark_group!(
     benches,
     bench_insert_one_empty,
@@ -122,6 +151,8 @@ benchmark_group!(
     bench_query_small_sketch,
     bench_query_full_sketch_one_tenth,
     bench_query_full_sketch_median,
-    bench_query_full_sketch_nine_tenths
+    bench_query_full_sketch_nine_tenths,
+    bench_merge_two_sketches,
+    bench_merge_many_sketches
 );
 benchmark_main!(benches);
