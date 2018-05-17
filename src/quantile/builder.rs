@@ -107,7 +107,7 @@ impl SketchBuilder {
                 if let Some((b1, b2)) = self.find_full_buffers_lowest_levels() {
                     self.merge_and_return_empty_buffer(b1, b2)
                 } else {
-                    panic!("Could not find two full buffers with same level to merge");
+                    self.empty_and_return_lowest_buffer()
                 }
             }
         }
@@ -169,6 +169,20 @@ impl SketchBuilder {
         }
     }
 
+    fn empty_and_return_lowest_buffer(&mut self) -> usize {
+        let idx = self.bufstate
+            .iter()
+            .filter_map(|&state| match state {
+                BufState::Full { level } => Some(level),
+                BufState::Filling { level, len: _ } => Some(level),
+                _ => None,
+            })
+            .min()
+            .expect("Could not any non-empty buffers");
+        self.bufstate[idx] = BufState::Empty;
+        idx
+    }
+
     fn concat_buffers(b1: &[u64], b2: &[u64], out: &mut [u64]) {
         debug_assert!(out.len() >= b1.len() + b2.len());
         for (idx, val) in b1.iter().enumerate() {
@@ -188,5 +202,25 @@ impl SketchBuilder {
             .filter_map(|(idx, val)| if r == (idx % 2 == 0) { Some(val) } else { None })
             .enumerate()
             .for_each(|(idx, val)| out[idx] = *val);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_empty_and_return_lowest_buffer() {
+        let mut b = SketchBuilder::new();
+        for v in 0..BUFSIZE {
+            b.insert(v as u64);
+        }
+        let idx = b.empty_and_return_lowest_buffer();
+        assert_eq!(idx, 0);
+
+        match b.bufstate[idx] {
+            BufState::Empty => (), // pass
+            _ => panic!("Expected empty buffer")
+        }
     }
 }
