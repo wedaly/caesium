@@ -70,7 +70,7 @@ impl SketchQuery {
         let mut items = Vec::with_capacity(BUFCOUNT * BUFSIZE);
         for b in sketch.buffer_iter() {
             let weight = 1 << b.level();
-            for value in b.values() {
+            for value in b.sorted_values() {
                 items.push(RankedValue {
                     value: *value,
                     rank: weight, // store the weight here for now to avoid extra allocation

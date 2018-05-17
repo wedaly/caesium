@@ -30,6 +30,7 @@ impl Buffer {
         self.level = level;
         self.len = values.len();
         self.slots[..self.len].clone_from_slice(values);
+        self.slots[..self.len].sort_unstable();
     }
 
     pub fn level(&self) -> usize {
@@ -40,7 +41,7 @@ impl Buffer {
         self.len
     }
 
-    pub fn values(&self) -> &[u64] {
+    pub fn sorted_values(&self) -> &[u64] {
         &self.slots[..self.len]
     }
 
@@ -91,7 +92,7 @@ mod tests {
         for b in sketch.buffer_iter() {
             assert_eq!(b.level(), 0);
             assert_eq!(b.len(), 0);
-            assert_eq!(b.values().len(), 0);
+            assert_eq!(b.sorted_values().len(), 0);
         }
     }
 
@@ -104,12 +105,23 @@ mod tests {
         sketch.buffer_mut(1).set(5, &data);
 
         // read
-        let b = sketch
-            .buffer_iter()
-            .nth(1)
-            .expect("Could not retrieve buffer");
+        let b = sketch.buffer(1);
         assert_eq!(b.level(), 5);
         assert_eq!(b.len(), data.len());
-        assert_eq!(b.values(), data);
+        assert_eq!(b.sorted_values(), data);
+    }
+
+    #[test]
+    fn it_sorts_values() {
+        let mut sketch = Sketch::new();
+
+        // write
+        let mut data = [6, 5, 1, 2, 7, 3];
+        sketch.buffer_mut(0).set(5, &data);
+
+        // read
+        let b = sketch.buffer(0);
+        data.sort();
+        assert_eq!(b.sorted_values(), data);
     }
 }
