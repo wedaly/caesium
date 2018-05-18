@@ -4,7 +4,6 @@ pub const EPSILON: f64 = 0.01;
 pub const BUFCOUNT: usize = 8; // log(1/epsilon) + 1
 pub const BUFSIZE: usize = 256; // (1/epsilon) * sqrt(log(1/epsilon))
 
-#[derive(Copy, Clone)]
 pub struct Buffer {
     slots: [u64; BUFSIZE],
     len: usize,
@@ -51,14 +50,16 @@ impl Buffer {
 }
 
 pub struct Sketch {
-    buffers: [Buffer; BUFCOUNT],
+    buffers: Vec<Buffer>,
 }
 
 impl Sketch {
     pub fn new() -> Sketch {
-        Sketch {
-            buffers: [Buffer::new(); BUFCOUNT],
+        let mut v = Vec::with_capacity(BUFCOUNT);
+        for _ in 0..BUFCOUNT {
+            v.push(Buffer::new());
         }
+        Sketch { buffers: v }
     }
 
     pub fn reset(&mut self) {

@@ -69,10 +69,10 @@ mod tests {
         let n = BUFSIZE * BUFCOUNT * 2;
         let input = random_distinct_values(n);
         let s1 = build_sketch(&input[..n / 2]);
-        let s2 = build_sketch(&input[n / 2..n]);
+        let mut s2 = build_sketch(&input[n / 2..n]);
         let mut m = SketchMerger::new();
-        let s = m.merge(s1, s2);
-        check_error_bound(&s, &input);
+        m.merge(&s1, &mut s2);
+        check_error_bound(&s2, &input);
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
             let start = i * sketch_size;
             let end = start + sketch_size;
             let new_sketch = build_sketch(&input[start..end]);
-            s = m.merge(s, new_sketch);
+            m.merge(&new_sketch, &mut s);
         }
         check_error_bound(&s, &input);
     }

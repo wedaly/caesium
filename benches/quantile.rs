@@ -16,6 +16,12 @@ fn insert_sequential(builder: &mut SketchBuilder, n: usize) {
     }
 }
 
+fn insert_random(builder: &mut SketchBuilder, n: usize) {
+    for v in random_values(n) {
+        builder.insert(v as u64);
+    }
+}
+
 fn random_values(n: usize) -> Vec<u64> {
     let mut rng = rand::thread_rng();
     let mut result: Vec<u64> = Vec::with_capacity(n);
@@ -111,32 +117,26 @@ fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
     bench.iter(|| q.query(0.9))
 }
 
-fn bench_merge_two_sketches(bench: &mut Bencher) {
+fn bench_merge_two_sketches_sequential_data(bench: &mut Bencher) {
     let mut b = SketchBuilder::new();
     insert_sequential(&mut b, BUFSIZE * BUFCOUNT);
     let mut m = SketchMerger::new();
-    bench.iter(|| {
-        let mut s1 = Sketch::new();
-        let mut s2 = Sketch::new();
-        b.build(&mut s1);
-        b.build(&mut s2);
-        m.merge(s1, s2)
-    })
+    let mut s1 = Sketch::new();
+    let mut s2 = Sketch::new();
+    b.build(&mut s1);
+    b.build(&mut s2);
+    bench.iter(|| m.merge(&s1, &mut s2))
 }
 
-fn bench_merge_many_sketches(bench: &mut Bencher) {
+fn bench_merge_two_sketches_random_data(bench: &mut Bencher) {
     let mut b = SketchBuilder::new();
-    insert_sequential(&mut b, BUFSIZE * BUFCOUNT);
+    insert_random(&mut b, BUFSIZE * BUFCOUNT);
     let mut m = SketchMerger::new();
-    bench.iter(|| {
-        let mut s = Sketch::new();
-        b.build(&mut s);
-        for _ in 0..100 {
-            let mut new_sketch = Sketch::new();
-            b.build(&mut new_sketch);
-            s = m.merge(s, new_sketch)
-        }
-    })
+    let mut s1 = Sketch::new();
+    let mut s2 = Sketch::new();
+    b.build(&mut s1);
+    b.build(&mut s2);
+    bench.iter(|| m.merge(&s1, &mut s2))
 }
 
 benchmark_group!(
@@ -152,7 +152,7 @@ benchmark_group!(
     bench_query_full_sketch_one_tenth,
     bench_query_full_sketch_median,
     bench_query_full_sketch_nine_tenths,
-    bench_merge_two_sketches,
-    bench_merge_many_sketches
+    bench_merge_two_sketches_sequential_data,
+    bench_merge_two_sketches_random_data,
 );
 benchmark_main!(benches);

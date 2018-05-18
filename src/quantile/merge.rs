@@ -52,13 +52,12 @@ impl SketchMerger {
         }
     }
 
-    pub fn merge(&mut self, mut s1: Sketch, s2: Sketch) -> Sketch {
+    pub fn merge(&mut self, s1: &Sketch, mut s2: &mut Sketch) {
         self.heap.clear();
-        self.insert_into_heap(&s1);
-        self.insert_into_heap(&s2);
+        self.insert_into_heap(s1);
+        self.insert_into_heap(s2);
         self.compact_heap();
-        self.update_sketch(&mut s1);
-        s1
+        self.update_sketch(&mut s2);
     }
 
     fn insert_into_heap(&mut self, s: &Sketch) {
@@ -102,12 +101,46 @@ impl SketchMerger {
 
     fn compact_two(mut x: HeapItem, y: HeapItem) -> HeapItem {
         let mut tmp = Vec::with_capacity(BUFSIZE * 2);
-        SketchMerger::concat_sorted_vectors(&x.values, &y.values, &mut tmp);
-        SketchMerger::compact_sorted_vec(&mut tmp);
+        SketchMerger::concat_and_compact_sorted_vectors(&x.values, &y.values, &mut tmp);
         x.values.clear();
         x.values.extend_from_slice(&tmp);
         x.level += 1;
         x
+    }
+
+    fn concat_and_compact_sorted_vectors(x: &Vec<u64>, y: &Vec<u64>, out: &mut Vec<u64>) {
+        let mut sel = rand::random::<bool>();
+        let (mut i, mut j) = (0, 0);
+        let (n, m) = (x.len(), y.len());
+        while i < n && j < m {
+            let lt = x[i] < y[j];
+            if sel {
+                // mask bits are either all 0s or all 1s
+                let x_mask = !(lt as u64).wrapping_sub(1);
+                let y_mask = !(!lt as u64).wrapping_sub(1);
+                let push_val = (x[i] & x_mask) | (y[j] & y_mask);
+                out.push(push_val);
+            }
+            i += lt as usize;
+            j += !lt as usize;
+            sel = !sel;
+        }
+
+        while i < n {
+            if sel {
+                out.push(x[i]);
+            }
+            i += 1;
+            sel = !sel;
+        }
+
+        while j < m {
+            if sel {
+                out.push(y[j]);
+            }
+            j += 1;
+            sel = !sel;
+        }
     }
 
     fn compact_sorted_vec(v: &mut Vec<u64>) {
@@ -126,24 +159,6 @@ impl SketchMerger {
         x.values.sort_unstable();
         x
     }
-
-    fn concat_sorted_vectors(x: &Vec<u64>, y: &Vec<u64>, out: &mut Vec<u64>) {
-        let (mut i, mut j) = (0, 0);
-        let (n, m) = (x.len(), y.len());
-        while i < n && j < m {
-            let (v1, v2) = (x[i], y[j]);
-            if v1 < v2 {
-                out.push(v1);
-                i += 1;
-            } else {
-                out.push(v2);
-                j += 1;
-            }
-        }
-
-        out.extend_from_slice(&x[i..n]);
-        out.extend_from_slice(&y[j..m]);
-    }
 }
 
 #[cfg(test)]
@@ -154,40 +169,40 @@ mod tests {
     fn it_merges_two_empty_sketches() {
         let mut merger = SketchMerger::new();
         let s1 = Sketch::new();
-        let s2 = Sketch::new();
-        let result = merger.merge(s1, s2);
-        assert_levels(&result, &[]);
-        assert_levels(&result, &[]);
+        let mut s2 = Sketch::new();
+        merger.merge(&s1, &mut s2);
+        assert_levels(&s2, &[]);
+        assert_levels(&s2, &[]);
     }
 
     #[test]
     fn it_merges_empty_sketch_with_non_empty_sketch() {
         let mut merger = SketchMerger::new();
         let s1 = Sketch::new();
-        let s2 = build_sketch(&[1]);
-        let result = merger.merge(s1, s2);
-        assert_levels(&result, &[1]);
-        assert_lengths(&result, &[BUFSIZE]);
+        let mut s2 = build_sketch(&[1]);
+        merger.merge(&s1, &mut s2);
+        assert_levels(&s2, &[1]);
+        assert_lengths(&s2, &[BUFSIZE]);
     }
 
     #[test]
     fn it_merges_two_half_full_sketches() {
         let mut merger = SketchMerger::new();
         let s1 = build_sketch(&[1, 2, 3, 4]);
-        let s2 = build_sketch(&[1, 2, 3, 4]);
-        let result = merger.merge(s1, s2);
-        assert_levels(&result, &[1, 1, 2, 2, 3, 3, 4, 4]);
-        assert_lengths(&result, &[BUFSIZE; BUFCOUNT]);
+        let mut s2 = build_sketch(&[1, 2, 3, 4]);
+        merger.merge(&s1, &mut s2);
+        assert_levels(&s2, &[1, 1, 2, 2, 3, 3, 4, 4]);
+        assert_lengths(&s2, &[BUFSIZE; BUFCOUNT]);
     }
 
     #[test]
     fn it_merges_two_full_sketches_same_levels() {
         let mut merger = SketchMerger::new();
         let s1 = build_sketch(&[0; BUFCOUNT]);
-        let s2 = build_sketch(&[0; BUFCOUNT]);
-        let result = merger.merge(s1, s2);
-        assert_levels(&result, &[1; BUFCOUNT]);
-        assert_lengths(&result, &[BUFSIZE; BUFCOUNT]);
+        let mut s2 = build_sketch(&[0; BUFCOUNT]);
+        merger.merge(&s1, &mut s2);
+        assert_levels(&s2, &[1; BUFCOUNT]);
+        assert_lengths(&s2, &[BUFSIZE; BUFCOUNT]);
     }
 
     #[test]
@@ -195,10 +210,10 @@ mod tests {
         let mut merger = SketchMerger::new();
         let levels = [0, 1, 2, 3, 4, 5, 6, 7];
         let s1 = build_sketch(&levels);
-        let s2 = build_sketch(&levels);
-        let result = merger.merge(s1, s2);
-        assert_levels(&result, &[4, 5, 5, 5, 6, 6, 7, 7]);
-        assert_lengths(&result, &[64, 240, 256, 256, 256, 256, 256, 256]);
+        let mut s2 = build_sketch(&levels);
+        merger.merge(&s1, &mut s2);
+        assert_levels(&s2, &[4, 5, 5, 5, 6, 6, 7, 7]);
+        assert_lengths(&s2, &[64, 240, 256, 256, 256, 256, 256, 256]);
     }
 
     #[test]
