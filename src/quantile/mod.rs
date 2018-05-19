@@ -1,4 +1,5 @@
 pub mod builder;
+pub mod error;
 pub mod merge;
 pub mod query;
 pub mod sampler;
@@ -8,15 +9,16 @@ pub mod sketch;
 mod tests {
     use super::builder::SketchBuilder;
     use super::merge::SketchMerger;
-    use super::query::SketchQuery;
+    use super::query::QueryableSketch;
     use super::sketch::{Sketch, BUFCOUNT, BUFSIZE, EPSILON};
+    use super::error::ErrorCalculator;
     use rand;
     use rand::Rng;
 
     #[test]
     fn it_handles_query_with_no_values() {
         let sketch = Sketch::new();
-        let q = SketchQuery::new(&sketch);
+        let q = QueryableSketch::new(&sketch);
         if let Some(_) = q.query(0.1) {
             panic!("expected no result!");
         }
@@ -133,21 +135,13 @@ mod tests {
     }
 
     fn check_error_bound(s: &Sketch, input: &[u64]) {
-        let q = SketchQuery::new(s);
-        let n = input.len();
-        let mut sorted = Vec::with_capacity(input.len());
-        sorted.extend_from_slice(input);
-        sorted.sort();
+        let q = QueryableSketch::new(s);
+        let calc = ErrorCalculator::new(&input);
         for i in 1..10 {
             let phi = i as f64 / 10.0;
-            let exact_idx = (n as f64 * phi) as usize;
-            let exact = sorted[exact_idx] as i64;
-            let result = q.query(phi).expect("no result from query") as i64;
-            let error = (exact - result).abs() as f64 / n as f64;
-            println!(
-                "phi = {}, exact = {}, result = {}, err = {}",
-                phi, exact, result, error
-            );
+            let approx = q.query(phi).expect("no result from query");
+            let error = calc.calculate_error(phi, approx);
+            println!("phi={}, approx={}, error={}", phi, approx, error);
             assert!(error <= EPSILON * 2.0);
         }
     }

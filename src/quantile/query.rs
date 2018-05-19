@@ -26,20 +26,20 @@ impl PartialEq for RankedValue {
     }
 }
 
-pub struct SketchQuery {
+pub struct QueryableSketch {
     count: usize,            // num items from the source data stream
     items: Vec<RankedValue>, // sorted asc by value
 }
 
-impl SketchQuery {
-    pub fn new(sketch: &Sketch) -> SketchQuery {
+impl QueryableSketch {
+    pub fn new(sketch: &Sketch) -> QueryableSketch {
         let count = sketch
             .buffer_iter()
             .map(|b| (1 << b.level()) * b.len())
             .sum();
-        SketchQuery {
+        QueryableSketch {
             count: count,
-            items: SketchQuery::sorted_items_from_sketch(sketch),
+            items: QueryableSketch::sorted_items_from_sketch(sketch),
         }
     }
 
