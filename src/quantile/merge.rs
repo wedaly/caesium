@@ -145,20 +145,13 @@ impl SketchMerger {
     }
 
     fn compact_sorted_vec(v: &mut Vec<u64>) {
-        // flip a coin
-        // heads => select even indices
-        // odds => select odd indices
-        let coin = rand::random::<bool>();
-        let (heads, tails) = (coin as usize, !coin as usize);
-
+        let r = rand::random::<bool>();
         let n = v.len();
-        for i in heads..n {
-            // map selected indices to indices 1..n/2
-            // identity mapping for non-selected indices (overwritten anyway)
-            let dst = (i / 2) + ((i + tails) % 2) * (i / 2 + heads);
-            v[dst] = v[i];
+        for idx in 0..n {
+            if r == ((idx % 2) == 0) {
+                v[idx / 2] = v[idx];
+            }
         }
-
         v.truncate(n / 2);
     }
 
@@ -230,21 +223,6 @@ mod tests {
         SketchMerger::compact_one(&mut item);
         assert_eq!(item.level, level + 1);
         assert_eq!(item.values.len(), BUFSIZE / 2);
-        match item.values.first() {
-            Some(&v) if v == 0 => assert_evens(&item.values),
-            Some(&v) if v == 1 => assert_odds(&item.values),
-            Some(_) => panic!("First item does not have expected value!"),
-            None => panic!("No first item found!"),
-        }
-    }
-
-    #[test]
-    fn it_compacts_single_item_odd_size() {
-        let level = 1;
-        let mut item = build_heap_item(level, BUFSIZE - 1);
-        SketchMerger::compact_one(&mut item);
-        assert_eq!(item.level, level + 1);
-        assert_eq!(item.values.len(), BUFSIZE / 2 - 1);
         match item.values.first() {
             Some(&v) if v == 0 => assert_evens(&item.values),
             Some(&v) if v == 1 => assert_odds(&item.values),
@@ -331,12 +309,12 @@ mod tests {
     }
 
     fn assert_evens(actual: &[u64]) {
-        let evens: Vec<u64> = (0..actual.len()).map(|v| (v * 2) as u64).collect();
+        let evens: Vec<u64> = (0..BUFSIZE / 2).map(|v| (v * 2) as u64).collect();
         assert_eq!(actual.to_vec(), evens);
     }
 
     fn assert_odds(actual: &[u64]) {
-        let odds: Vec<u64> = (0..actual.len()).map(|v| ((v * 2) + 1) as u64).collect();
+        let odds: Vec<u64> = (0..BUFSIZE / 2).map(|v| ((v * 2) + 1) as u64).collect();
         assert_eq!(actual.to_vec(), odds);
     }
 
