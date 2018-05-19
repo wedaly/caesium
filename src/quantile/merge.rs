@@ -70,14 +70,17 @@ impl SketchMerger {
 
     fn compact_heap(&mut self) {
         while self.heap.len() > BUFCOUNT {
-            if let (Some(head), Some(next)) = (self.heap.pop(), self.heap.pop()) {
+            if let (Some(mut head), Some(next)) = (self.heap.pop(), self.heap.pop()) {
                 if head.level < next.level {
-                    self.heap.push(SketchMerger::compact_one(head));
+                    SketchMerger::compact_one(&mut head);
+                    self.heap.push(head);
                 } else {
                     if head.values.len() + next.values.len() > BUFSIZE {
-                        self.heap.push(SketchMerger::compact_two(head, next));
+                        SketchMerger::compact_two(&mut head, &next);
+                        self.heap.push(head);
                     } else {
-                        self.heap.push(SketchMerger::concat_two(head, next));
+                        SketchMerger::concat_two(&mut head, &next);
+                        self.heap.push(head);
                     }
                 }
             }
@@ -93,19 +96,17 @@ impl SketchMerger {
         }
     }
 
-    fn compact_one(mut x: HeapItem) -> HeapItem {
+    fn compact_one(x: &mut HeapItem) {
         SketchMerger::compact_sorted_vec(&mut x.values);
         x.level += 1;
-        x
     }
 
-    fn compact_two(mut x: HeapItem, y: HeapItem) -> HeapItem {
+    fn compact_two(x: &mut HeapItem, y: &HeapItem) {
         let mut tmp = Vec::with_capacity(BUFSIZE * 2);
         SketchMerger::concat_and_compact_sorted_vectors(&x.values, &y.values, &mut tmp);
         x.values.clear();
         x.values.extend_from_slice(&tmp);
         x.level += 1;
-        x
     }
 
     fn concat_and_compact_sorted_vectors(x: &Vec<u64>, y: &Vec<u64>, out: &mut Vec<u64>) {
@@ -154,10 +155,9 @@ impl SketchMerger {
         v.truncate(n / 2);
     }
 
-    fn concat_two(mut x: HeapItem, y: HeapItem) -> HeapItem {
+    fn concat_two(x: &mut HeapItem, y: &HeapItem) {
         x.values.extend_from_slice(&y.values);
         x.values.sort_unstable();
-        x
     }
 }
 
@@ -219,13 +219,13 @@ mod tests {
     #[test]
     fn it_compacts_single_item() {
         let level = 1;
-        let item = build_heap_item(level, BUFSIZE);
-        let result = SketchMerger::compact_one(item);
-        assert_eq!(result.level, level + 1);
-        assert_eq!(result.values.len(), BUFSIZE / 2);
-        match result.values.first() {
-            Some(&v) if v == 0 => assert_evens(&result.values),
-            Some(&v) if v == 1 => assert_odds(&result.values),
+        let mut item = build_heap_item(level, BUFSIZE);
+        SketchMerger::compact_one(&mut item);
+        assert_eq!(item.level, level + 1);
+        assert_eq!(item.values.len(), BUFSIZE / 2);
+        match item.values.first() {
+            Some(&v) if v == 0 => assert_evens(&item.values),
+            Some(&v) if v == 1 => assert_odds(&item.values),
             Some(_) => panic!("First item does not have expected value!"),
             None => panic!("No first item found!"),
         }
@@ -234,33 +234,31 @@ mod tests {
     #[test]
     fn it_compacts_two_items() {
         let level = 1;
-        let x = build_heap_item(level, BUFSIZE);
+        let mut x = build_heap_item(level, BUFSIZE);
         let y = build_heap_item(level, BUFSIZE);
-        let result = SketchMerger::compact_two(x, y);
-        assert_eq!(result.level, level + 1);
-        assert_eq!(result.values.len(), BUFSIZE);
-        assert_sequential(&result.values);
+        SketchMerger::compact_two(&mut x, &y);
+        assert_eq!(x.level, level + 1);
+        assert_eq!(x.values.len(), BUFSIZE);
+        assert_sequential(&x.values);
     }
 
     #[test]
     fn it_concats_two_items() {
         let level = 1;
-        let x = build_heap_item(level, BUFSIZE / 2);
+        let mut x = build_heap_item(level, BUFSIZE / 2);
         let y = build_heap_item(level, BUFSIZE / 2);
-        let result = SketchMerger::concat_two(x, y);
-        assert_eq!(result.level, level);
-        assert_eq!(result.values.len(), BUFSIZE);
+        SketchMerger::concat_two(&mut x, &y);
+        assert_eq!(x.level, level);
+        assert_eq!(x.values.len(), BUFSIZE);
 
-        let odds: Vec<u64> = result
-            .values
+        let odds: Vec<u64> = x.values
             .iter()
             .enumerate()
             .filter_map(|(idx, v)| if idx % 2 == 1 { Some(*v) } else { None })
             .collect();
         assert_sequential(&odds);
 
-        let evens: Vec<u64> = result
-            .values
+        let evens: Vec<u64> = x.values
             .iter()
             .enumerate()
             .filter_map(|(idx, v)| if idx % 2 == 0 { Some(*v) } else { None })
