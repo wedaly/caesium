@@ -8,10 +8,10 @@ pub mod sketch;
 #[cfg(test)]
 mod tests {
     use super::builder::SketchBuilder;
+    use super::error::ErrorCalculator;
     use super::merge::SketchMerger;
     use super::query::QueryableSketch;
     use super::sketch::{Sketch, BUFCOUNT, BUFSIZE, EPSILON};
-    use super::error::ErrorCalculator;
     use rand;
     use rand::Rng;
 
