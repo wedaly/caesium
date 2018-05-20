@@ -31,7 +31,7 @@ impl SketchBuilder {
         }
     }
 
-    pub fn clear(&mut self) {
+    pub fn reset(&mut self) {
         self.sampler.reset();
         self.bufstate = [BufState::Empty; BUFCOUNT];
         self.active_level = 0;

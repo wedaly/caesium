@@ -1,12 +1,15 @@
 extern crate caesium;
+extern crate rand;
 use caesium::quantile::builder::SketchBuilder;
 use caesium::quantile::error::ErrorCalculator;
+use caesium::quantile::merge::SketchMerger;
 use caesium::quantile::query::QueryableSketch;
 use caesium::quantile::sketch::Sketch;
 use std::env;
 use std::fs::File;
 use std::io::Error as IOError;
 use std::io::{BufRead, BufReader};
+use rand::Rng;
 
 #[derive(Debug)]
 enum Error {
@@ -26,15 +29,18 @@ impl From<IOError> for Error {
     }
 }
 
+#[derive(Debug)]
 struct Args {
     data_path: String,
+    num_merges: usize,
 }
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
     let data = read_data_file(&args.data_path)?;
+    let partitions = choose_merge_partitions(data.len(), args.num_merges);
     let mut sketch = Sketch::new();
-    build_sketch(&data, &mut sketch);
+    build_sketch(&data, &partitions[..], &mut sketch);
     let calc = ErrorCalculator::new(&data);
     summarize_error(&calc, &sketch);
     Ok(())
@@ -44,8 +50,13 @@ fn parse_args() -> Result<Args, Error> {
     let data_path = env::args()
         .nth(1)
         .ok_or(Error::arg_err("Missing required argument `data_path`"))?;
+    let num_merges = env::args()
+        .nth(2)
+        .map_or(Ok(0), |s| s.parse::<usize>())
+        .map_err(|_| Error::arg_err("Could not parse integer for arg `num_merges`"))?;
     Ok(Args {
         data_path: data_path,
+        num_merges: num_merges,
     })
 }
 
@@ -71,12 +82,41 @@ fn parse_val_from_line(line: Result<String, IOError>) -> Option<u64> {
     }
 }
 
-fn build_sketch(data: &[u64], mut sketch: &mut Sketch) {
-    let mut builder = SketchBuilder::new();
-    for v in data.iter() {
-        builder.insert(*v);
+fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
+    let mut candidates: Vec<usize> = (0..data_len).collect();
+    rand::thread_rng().shuffle(&mut candidates);
+    candidates.iter().take(num_merges).map(|x| *x).collect()
+}
+
+fn build_sketch(data: &[u64], partitions: &[usize], mut result: &mut Sketch) {
+    debug_assert!(partitions.len() <= data.len());
+    debug_assert!(partitions.iter().all(|p| *p < data.len()));
+    if data.is_empty() {
+        return;
     }
-    builder.build(&mut sketch);
+
+    let mut sorted_partitions = Vec::with_capacity(partitions.len());
+    sorted_partitions.extend_from_slice(partitions);
+    sorted_partitions.sort_unstable();
+
+    let mut tmp = Sketch::new();
+    let mut merger = SketchMerger::new();
+    let mut builder = SketchBuilder::new();
+    let mut b = 0;
+    data.iter().enumerate().for_each(|(idx, val)| {
+        let cutoff = match sorted_partitions.get(b) {
+            None => data.len() - 1,
+            Some(&x) => x
+        };
+        builder.insert(*val);
+        if idx >= cutoff {
+            builder.build(&mut tmp);
+            merger.merge(&tmp, &mut result);
+            tmp.reset();
+            builder.reset();
+            b += 1;
+        }
+    });
 }
 
 fn summarize_error(calc: &ErrorCalculator, sketch: &Sketch) {
@@ -85,6 +125,5 @@ fn summarize_error(calc: &ErrorCalculator, sketch: &Sketch) {
         let phi = (i as f64) / 10.0;
         let approx = q.query(phi).expect("Could not query sketch");
         let err = calc.calculate_error(phi, approx);
-        println!("phi={}, err={}", phi, err);
     }
 }

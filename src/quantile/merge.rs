@@ -71,9 +71,14 @@ impl SketchMerger {
     fn compact_heap(&mut self) {
         while self.heap.len() > BUFCOUNT {
             if let (Some(mut head), Some(next)) = (self.heap.pop(), self.heap.pop()) {
+                debug_assert!(head.values.len() > 0);
+                debug_assert!(next.values.len() > 0);
                 if head.level < next.level {
                     SketchMerger::compact_one(&mut head);
-                    self.heap.push(head);
+                    if head.values.len() > 0 {
+                        self.heap.push(head);
+                    }
+                    self.heap.push(next);
                 } else {
                     if head.values.len() + next.values.len() > BUFSIZE {
                         SketchMerger::compact_two(&mut head, &next);
