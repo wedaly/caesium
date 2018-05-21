@@ -1,15 +1,12 @@
 extern crate caesium;
 extern crate rand;
-use caesium::quantile::builder::SketchBuilder;
+use caesium::quantile::sketch::{WritableSketch, ReadableSketch};
 use caesium::quantile::error::ErrorCalculator;
-use caesium::quantile::merge::SketchMerger;
-use caesium::quantile::query::QueryableSketch;
-use caesium::quantile::sketch::Sketch;
+use rand::Rng;
 use std::env;
 use std::fs::File;
 use std::io::Error as IOError;
 use std::io::{BufRead, BufReader};
-use rand::Rng;
 
 #[derive(Debug)]
 enum Error {
@@ -39,8 +36,7 @@ fn main() -> Result<(), Error> {
     let args = parse_args()?;
     let data = read_data_file(&args.data_path)?;
     let partitions = choose_merge_partitions(data.len(), args.num_merges);
-    let mut sketch = Sketch::new();
-    build_sketch(&data, &partitions[..], &mut sketch);
+    let sketch = build_sketch(&data, &partitions[..]);
     let calc = ErrorCalculator::new(&data);
     summarize_error(&calc, &sketch);
     Ok(())
@@ -88,42 +84,36 @@ fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
     candidates.iter().take(num_merges).map(|x| *x).collect()
 }
 
-fn build_sketch(data: &[u64], partitions: &[usize], mut result: &mut Sketch) {
+fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
     debug_assert!(partitions.len() <= data.len());
     debug_assert!(partitions.iter().all(|p| *p < data.len()));
-    if data.is_empty() {
-        return;
-    }
-
     let mut sorted_partitions = Vec::with_capacity(partitions.len());
     sorted_partitions.extend_from_slice(partitions);
     sorted_partitions.sort_unstable();
 
-    let mut tmp = Sketch::new();
-    let mut merger = SketchMerger::new();
-    let mut builder = SketchBuilder::new();
+    let mut tmp = WritableSketch::new();
+    let mut result = WritableSketch::new();
     let mut b = 0;
     data.iter().enumerate().for_each(|(idx, val)| {
         let cutoff = match sorted_partitions.get(b) {
             None => data.len() - 1,
-            Some(&x) => x
+            Some(&x) => x,
         };
-        builder.insert(*val);
+        tmp.insert(*val);
         if idx >= cutoff {
-            builder.build(&mut tmp);
-            merger.merge(&tmp, &mut result);
+            result.merge(&tmp);
             tmp.reset();
-            builder.reset();
             b += 1;
         }
     });
+    result.to_readable_sketch()
 }
 
-fn summarize_error(calc: &ErrorCalculator, sketch: &Sketch) {
-    let q = QueryableSketch::new(sketch);
+fn summarize_error(calc: &ErrorCalculator, sketch: &ReadableSketch) {
     for i in 1..10 {
         let phi = (i as f64) / 10.0;
-        let approx = q.query(phi).expect("Could not query sketch");
+        let approx = sketch.query(phi).expect("Could not query sketch");
         let err = calc.calculate_error(phi, approx);
+        println!("phi={}, approx={}, err={}", phi, approx, err);
     }
 }

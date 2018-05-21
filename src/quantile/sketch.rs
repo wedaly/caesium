@@ -1,128 +1,213 @@
-use std::slice::Iter;
+use rand;
+use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
 
-pub const EPSILON: f64 = 0.01;
-pub const BUFCOUNT: usize = 8; // log(1/epsilon) + 1
-pub const BUFSIZE: usize = 256; // (1/epsilon) * sqrt(log(1/epsilon))
-
-pub struct Buffer {
-    slots: [u64; BUFSIZE],
-    len: usize,
-    level: usize,
+pub struct WritableSketch {
+    buffers: Vec<Vec<u64>>,
+    size: usize,
+    max_size: usize,
+    max_height: usize,
 }
 
-impl Buffer {
-    pub fn new() -> Buffer {
-        Buffer {
-            slots: [0; BUFSIZE],
-            len: 0,
-            level: 0,
-        }
+impl WritableSketch {
+    pub fn new() -> WritableSketch {
+        let mut sketch = WritableSketch {
+            buffers: Vec::with_capacity(1),
+            size: 0,
+            max_size: 0,
+            max_height: 0,
+        };
+        sketch.grow();
+        sketch
     }
 
     pub fn reset(&mut self) {
-        self.len = 0;
-        self.level = 0;
+        self.buffers.clear();
+        self.size = 0;
+        self.max_size = 0;
+        self.max_height = 0;
+        self.grow();
     }
 
-    pub fn set(&mut self, level: usize, values: &[u64]) {
-        debug_assert!(values.len() <= BUFSIZE);
-        self.level = level;
-        self.len = values.len();
-        self.slots[..self.len].clone_from_slice(values);
-        self.slots[..self.len].sort_unstable();
-    }
-
-    pub fn level(&self) -> usize {
-        self.level
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn sorted_values(&self) -> &[u64] {
-        &self.slots[..self.len]
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-pub struct Sketch {
-    buffers: Vec<Buffer>,
-}
-
-impl Sketch {
-    pub fn new() -> Sketch {
-        let mut v = Vec::with_capacity(BUFCOUNT);
-        for _ in 0..BUFCOUNT {
-            v.push(Buffer::new());
-        }
-        Sketch { buffers: v }
-    }
-
-    pub fn reset(&mut self) {
-        for b in self.buffers.iter_mut() {
-            b.reset()
+    pub fn insert(&mut self, val: u64) {
+        self.buffers[0].push(val);
+        self.size += 1;
+        if self.size >= self.max_size {
+            self.compress();
+            debug_assert!(self.size < self.max_size);
         }
     }
 
-    pub fn buffer_iter(&self) -> Iter<Buffer> {
-        self.buffers.iter()
-    }
-
-    pub fn buffer(&self, idx: usize) -> &Buffer {
-        debug_assert!(idx < BUFCOUNT);
-        &self.buffers[idx]
-    }
-
-    pub fn buffer_mut(&mut self, idx: usize) -> &mut Buffer {
-        debug_assert!(idx < BUFCOUNT);
-        &mut self.buffers[idx]
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_sets_default_buffer_values() {
-        let sketch = Sketch::new();
-        for b in sketch.buffer_iter() {
-            assert_eq!(b.level(), 0);
-            assert_eq!(b.len(), 0);
-            assert_eq!(b.sorted_values().len(), 0);
+    pub fn merge(&mut self, other: &WritableSketch) {
+        while self.max_height < other.max_height {
+            self.grow();
+        }
+        for (b1, b2) in self.buffers.iter_mut().zip(other.buffers.iter()) {
+            b1.extend_from_slice(b2);
+        }
+        self.size = self.calculate_size();
+        while self.size >= self.max_size {
+            self.compress();
         }
     }
 
-    #[test]
-    fn it_writes_and_reads_data() {
-        let mut sketch = Sketch::new();
-
-        // write
-        let data = [1, 2, 3, 4];
-        sketch.buffer_mut(1).set(5, &data);
-
-        // read
-        let b = sketch.buffer(1);
-        assert_eq!(b.level(), 5);
-        assert_eq!(b.len(), data.len());
-        assert_eq!(b.sorted_values(), data);
+    pub fn to_readable_sketch(&self) -> ReadableSketch {
+        let mut result = ReadableSketch::new();
+        for (h, b) in self.buffers.iter().enumerate() {
+            let weight = 1 << h;
+            result.extend(weight, &b);
+        }
+        result.seal();
+        result
     }
 
-    #[test]
-    fn it_sorts_values() {
-        let mut sketch = Sketch::new();
+    fn grow(&mut self) {
+        self.buffers.push(Vec::new());
+        self.max_height += 1;
+        self.max_size = self.calculate_max_size();
+    }
 
-        // write
-        let mut data = [6, 5, 1, 2, 7, 3];
-        sketch.buffer_mut(0).set(5, &data);
+    fn compress(&mut self) {
+        let h = self.find_buffer_to_compress();
+        if h + 1 >= self.max_height {
+            self.grow();
+        }
 
-        // read
-        let b = sketch.buffer(0);
-        data.sort();
-        assert_eq!(b.sorted_values(), data);
+        let mut tmp = Vec::new();
+        {
+            let mut src = self.buffers
+                .get_mut(h)
+                .expect("Could not retrieve src buffer");
+            WritableSketch::compact(&mut src, &mut tmp);
+        }
+        {
+            let dst = self.buffers
+                .get_mut(h + 1)
+                .expect("Could not retrieve dst buffer");
+            dst.extend_from_slice(&tmp);
+        }
+
+        self.size = self.calculate_size();
+    }
+
+    fn find_buffer_to_compress(&self) -> usize {
+        for (h, b) in self.buffers.iter().enumerate() {
+            if b.len() >= self.capacity_at_height(h) {
+                return h;
+            }
+        }
+        return 0;
+    }
+
+    fn calculate_max_size(&self) -> usize {
+        let mut result = 0;
+        for h in 0..self.max_height {
+            result += self.capacity_at_height(h);
+        }
+        result
+    }
+
+    fn calculate_size(&self) -> usize {
+        self.buffers.iter().map(|b| b.len()).sum()
+    }
+
+    fn capacity_at_height(&self, h: usize) -> usize {
+        4096 // TODO: make this dynamic
+    }
+
+    fn compact(src: &mut Vec<u64>, dst: &mut Vec<u64>) {
+        let mut r = rand::random::<bool>();
+        for val in src.iter() {
+            if r {
+                dst.push(*val);
+            }
+            r = !r;
+        }
+        src.clear();
+    }
+}
+
+#[derive(Copy, Clone, Eq)]
+struct RankedValue {
+    value: u64,
+    rank: usize,
+}
+
+impl Ord for RankedValue {
+    fn cmp(&self, other: &RankedValue) -> Ordering {
+        self.value.cmp(&other.value)
+    }
+}
+
+impl PartialOrd for RankedValue {
+    fn partial_cmp(&self, other: &RankedValue) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for RankedValue {
+    fn eq(&self, other: &RankedValue) -> bool {
+        self.value == other.value
+    }
+}
+
+pub struct ReadableSketch {
+    data: Vec<RankedValue>,
+    count: usize,
+    sealed: bool,
+}
+
+impl ReadableSketch {
+    fn new() -> ReadableSketch {
+        ReadableSketch {
+            data: Vec::new(),
+            count: 0,
+            sealed: false,
+        }
+    }
+
+    pub fn query(&self, phi: f64) -> Option<u64> {
+        assert!(self.sealed);
+        assert!(0.0 < phi && phi < 1.0);
+        let target = phi * self.count as f64;
+        let mut start = 0;
+        let mut end = self.data.len();
+        while end - start > 1 {
+            let mid = start + (end - start) / 2;
+            let rank = self.data[mid].rank as f64;
+            if target < rank {
+                end = mid;
+            } else if target > rank {
+                start = mid;
+            } else {
+                return Some(self.data[mid].value);
+            }
+        }
+        if end - start == 1 {
+            Some(self.data[start].value)
+        } else {
+            None
+        }
+    }
+
+    fn extend(&mut self, weight: usize, values: &[u64]) {
+        assert!(!self.sealed);
+        self.count += weight * values.len();
+        for v in values {
+            self.data.push(RankedValue {
+                value: *v,
+                rank: weight, // tmp store the weight here
+            });
+        }
+    }
+
+    fn seal(&mut self) {
+        self.data.sort_unstable();
+        let mut rank = 0;
+        for x in self.data.iter_mut() {
+            let weight = x.rank; // stored weight from earlier
+            x.rank = rank;
+            rank += weight;
+        }
+        self.sealed = true;
     }
 }
