@@ -6,7 +6,7 @@ extern crate rand;
 use bencher::Bencher;
 use caesium::quantile::builder::SketchBuilder;
 use caesium::quantile::merge::SketchMerger;
-use caesium::quantile::query::SketchQuery;
+use caesium::quantile::query::QueryableSketch;
 use caesium::quantile::sketch::{Sketch, BUFCOUNT, BUFSIZE};
 use rand::Rng;
 
@@ -44,9 +44,9 @@ fn setup_sketch(num_buffers: usize) -> Sketch {
     sketch
 }
 
-fn setup_query(num_buffers: usize) -> SketchQuery {
+fn setup_query(num_buffers: usize) -> QueryableSketch {
     let sketch = setup_sketch(num_buffers);
-    SketchQuery::new(&sketch)
+    QueryableSketch::new(&sketch)
 }
 
 fn bench_insert_one_empty(bench: &mut Bencher) {

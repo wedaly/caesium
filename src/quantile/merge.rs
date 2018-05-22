@@ -217,8 +217,8 @@ mod tests {
         let s1 = build_sketch(&levels);
         let mut s2 = build_sketch(&levels);
         merger.merge(&s1, &mut s2);
-        assert_levels(&s2, &[4, 5, 5, 5, 6, 6, 7, 7]);
-        assert_lengths(&s2, &[64, 240, 256, 256, 256, 256, 256, 256]);
+        assert_levels(&s2, &[5, 5, 5, 5, 6, 6, 7, 7]);
+        assert_lengths(&s2, &[240, 256, 256, 256, 256, 256, 256, 256]);
     }
 
     #[test]
