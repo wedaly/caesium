@@ -36,9 +36,14 @@ fn main() -> Result<(), Error> {
     let args = parse_args()?;
     let data = read_data_file(&args.data_path)?;
     let partitions = choose_merge_partitions(data.len(), args.num_merges);
-    let sketch = build_sketch(&data, &partitions[..]);
+
+    let writable_sketch = build_sketch(&data, &partitions[..]);
+    summarize_space(&writable_sketch);
+
+    let readable_sketch = writable_sketch.to_readable_sketch();
     let calc = ErrorCalculator::new(&data);
-    summarize_error(&calc, &sketch);
+    summarize_error(&calc, &readable_sketch);
+
     Ok(())
 }
 
@@ -84,7 +89,7 @@ fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
     candidates.iter().take(num_merges).map(|x| *x).collect()
 }
 
-fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
+fn build_sketch(data: &[u64], partitions: &[usize]) -> WritableSketch {
     debug_assert!(partitions.len() <= data.len());
     debug_assert!(partitions.iter().all(|p| *p < data.len()));
     let mut sorted_partitions = Vec::with_capacity(partitions.len());
@@ -106,7 +111,11 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
             b += 1;
         }
     });
-    result.to_readable_sketch()
+    result
+}
+
+fn summarize_space(sketch: &WritableSketch) {
+    println!("Sketch size: {} bytes", sketch.size_in_bytes());
 }
 
 fn summarize_error(calc: &ErrorCalculator, sketch: &ReadableSketch) {

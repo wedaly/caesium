@@ -1,5 +1,6 @@
 use rand;
 use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
+use std::mem::size_of;
 
 pub struct WritableSketch {
     buffers: Vec<Vec<u64>>,
@@ -58,6 +59,10 @@ impl WritableSketch {
         }
         result.seal();
         result
+    }
+
+    pub fn size_in_bytes(&self) -> usize {
+        self.size * size_of::<u64>()
     }
 
     fn grow(&mut self) {
