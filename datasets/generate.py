@@ -4,8 +4,8 @@ import os.path
 import numpy as np
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-MAX_VAL = 0xFFFFFFFFFFFFFFFF
-SIZES = [10 ** p for p in range(4, 9)]
+MAX_VAL = 0xFFFFFFFFFFFFFFF
+SIZES = [10 ** p for p in range(4, 8)]
 
 
 def main():
