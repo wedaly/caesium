@@ -77,18 +77,13 @@ impl WritableSketch {
             self.grow();
         }
 
-        let mut tmp = Vec::new();
         {
-            let mut src = self.buffers
-                .get_mut(h)
+            let (left, right) = self.buffers.split_at_mut(h+1);
+            let mut src = left.get_mut(h)
                 .expect("Could not retrieve src buffer");
-            WritableSketch::compact(&mut src, &mut tmp);
-        }
-        {
-            let dst = self.buffers
-                .get_mut(h + 1)
+            let mut dst = right.get_mut(0)
                 .expect("Could not retrieve dst buffer");
-            dst.extend_from_slice(&tmp);
+            WritableSketch::compact(&mut src, &mut dst);
         }
 
         self.size = self.calculate_size();
@@ -121,6 +116,7 @@ impl WritableSketch {
 
     fn compact(src: &mut Vec<u64>, dst: &mut Vec<u64>) {
         let mut r = rand::random::<bool>();
+        src.sort_unstable();
         for val in src.iter() {
             if r {
                 dst.push(*val);
@@ -294,7 +290,7 @@ mod tests {
     #[test]
     fn it_merges_many_sketches_without_increasing_error() {
         let sketch_size = MEDIUM_SIZE;
-        let num_sketches = 100;
+        let num_sketches = 30;
         let input = random_distinct_values(sketch_size * num_sketches);
         let mut s = build_writable_sketch(&input[..sketch_size]);
         for i in 1..num_sketches {
@@ -358,7 +354,7 @@ mod tests {
             let approx = sketch.query(phi).expect("no result from query");
             let error = calc.calculate_error(phi, approx);
             println!("phi={}, approx={}, error={}", phi, approx, error);
-            assert!(error <= EPSILON * 2.0);
+            assert!(error <= EPSILON);
         }
     }
 }
