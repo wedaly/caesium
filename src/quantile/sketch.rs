@@ -111,7 +111,9 @@ impl WritableSketch {
     }
 
     fn capacity_at_height(&self, h: usize) -> usize {
-        4096 // TODO: make this dynamic
+        let depth = (self.max_height - h) as f32;
+        let factor = (0.6f32).powf(depth);
+        (factor * 256f32).max(2f32) as usize
     }
 
     fn compact(src: &mut Vec<u64>, dst: &mut Vec<u64>) {
