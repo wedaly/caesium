@@ -1,217 +1,279 @@
+use quantile::sampler::Sampler;
 use rand;
-use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
-use std::mem::size_of;
+use std::cmp::{max, Ord, Ordering, PartialEq, PartialOrd};
+use std::collections::HashMap;
+
+const BUFSIZE: usize = 256;
+const BUFCOUNT: usize = 8;
 
 pub struct WritableSketch {
-    buffers: Vec<Vec<u64>>,
-    size: usize,
-    max_size: usize,
-    max_height: usize,
+    sampler: Sampler,
+    current_buffer: usize,
+    count: usize,
+    buffers: [[u64; BUFSIZE]; BUFCOUNT],
+    lengths: [usize; BUFCOUNT],
+    levels: [usize; BUFCOUNT],
+    active_level: usize,
 }
 
 impl WritableSketch {
     pub fn new() -> WritableSketch {
-        let mut sketch = WritableSketch {
-            buffers: Vec::with_capacity(1),
-            size: 0,
-            max_size: 0,
-            max_height: 0,
-        };
-        sketch.grow();
-        sketch
+        WritableSketch {
+            sampler: Sampler::new(),
+            current_buffer: 0,
+            count: 0,
+            buffers: [[0; BUFSIZE]; BUFCOUNT],
+            lengths: [0; BUFCOUNT],
+            levels: [0; BUFCOUNT],
+            active_level: 0,
+        }
     }
 
     pub fn reset(&mut self) {
-        self.buffers.clear();
-        self.size = 0;
-        self.max_size = 0;
-        self.max_height = 0;
-        self.grow();
+        self.current_buffer = 0;
+        self.count = 0;
+        self.active_level = 0;
+        self.sampler.reset();
+        for i in 0..BUFCOUNT {
+            self.lengths[i] = 0;
+            self.levels[i] = 0;
+        }
     }
 
     pub fn insert(&mut self, val: u64) {
-        self.buffers[0].push(val);
-        self.size += 1;
-        if self.size >= self.max_size {
-            self.compress();
-            debug_assert!(self.size < self.max_size);
+        self.count += 1;
+        if let Some(val) = self.sampler.sample(val) {
+            self.update_active_level();
+            let idx = self.choose_insert_buffer();
+            let len = self.lengths[idx];
+            debug_assert!(len < BUFSIZE);
+            self.buffers[idx][len] = val;
+            self.lengths[idx] += 1;
+            self.current_buffer = idx;
         }
     }
 
-    pub fn merge(&mut self, other: &WritableSketch) {
-        while self.max_height < other.max_height {
-            self.grow();
-        }
-        for (b1, b2) in self.buffers.iter_mut().zip(other.buffers.iter()) {
-            b1.extend_from_slice(b2);
-        }
-        self.size = self.calculate_size();
-        while self.size >= self.max_size {
-            self.compress();
-        }
-    }
-
-    pub fn to_readable_sketch(&self) -> ReadableSketch {
-        let mut result = ReadableSketch::new();
-        for (h, b) in self.buffers.iter().enumerate() {
-            let weight = 1 << h;
-            result.extend(weight, &b);
-        }
-        result.seal();
-        result
-    }
-
-    pub fn size_in_bytes(&self) -> usize {
-        self.size * size_of::<u64>()
-    }
-
-    fn grow(&mut self) {
-        self.buffers.push(Vec::new());
-        self.max_height += 1;
-        self.max_size = self.calculate_max_size();
-    }
-
-    fn compress(&mut self) {
-        let h = self.find_buffer_to_compress();
-        if h + 1 >= self.max_height {
-            self.grow();
-        }
-
-        {
-            let (left, right) = self.buffers.split_at_mut(h+1);
-            let mut src = left.get_mut(h)
-                .expect("Could not retrieve src buffer");
-            let mut dst = right.get_mut(0)
-                .expect("Could not retrieve dst buffer");
-            WritableSketch::compact(&mut src, &mut dst);
-        }
-
-        self.size = self.calculate_size();
-    }
-
-    fn find_buffer_to_compress(&self) -> usize {
-        for (h, b) in self.buffers.iter().enumerate() {
-            if b.len() >= self.capacity_at_height(h) {
-                return h;
+    pub fn to_mergable(&self) -> MergableSketch {
+        let mut level_map: HashMap<usize, Vec<u64>> = HashMap::with_capacity(BUFCOUNT);
+        for idx in 0..BUFCOUNT {
+            let len = self.lengths[idx];
+            if len > 0 {
+                let level = self.levels[idx];
+                let values = level_map
+                    .entry(level)
+                    .or_insert_with(|| Vec::new());
+                values.extend_from_slice(&self.buffers[idx][..len]);
             }
         }
-        return 0;
+        MergableSketch::new(self.count, level_map)
     }
 
-    fn calculate_max_size(&self) -> usize {
-        let mut result = 0;
-        for h in 0..self.max_height {
-            result += self.capacity_at_height(h);
-        }
-        result
-    }
-
-    fn calculate_size(&self) -> usize {
-        self.buffers.iter().map(|b| b.len()).sum()
-    }
-
-    fn capacity_at_height(&self, h: usize) -> usize {
-        let depth = (self.max_height - h) as f32;
-        let factor = (0.6f32).powf(depth);
-        (factor * 256f32).max(2f32) as usize
-    }
-
-    fn compact(src: &mut Vec<u64>, dst: &mut Vec<u64>) {
-        let mut r = rand::random::<bool>();
-        src.sort_unstable();
-        for val in src.iter() {
-            if r {
-                dst.push(*val);
+    pub fn to_readable(&self) -> ReadableSketch {
+        let mut weighted_values = Vec::with_capacity(BUFSIZE * BUFCOUNT);
+        for idx in 0..BUFCOUNT {
+            let len = self.lengths[idx];
+            if len > 0 {
+                let weight = 1 << self.levels[idx];
+                for &val in &self.buffers[idx][..len] {
+                    weighted_values.push(WeightedValue {
+                        value: val,
+                        weight: weight,
+                    });
+                }
             }
-            r = !r;
         }
-        src.clear();
+        ReadableSketch::new(self.count, weighted_values)
+    }
+
+    fn choose_insert_buffer(&mut self) -> usize {
+        if self.lengths[self.current_buffer] < BUFSIZE {
+            self.current_buffer
+        } else if let Some(idx) = self.find_empty_buffer() {
+            idx
+        } else {
+            self.merge_two_buffers()
+        }
+    }
+
+    fn merge_two_buffers(&mut self) -> usize {
+        if let Some((b1, b2)) = self.find_buffers_to_merge() {
+            self.compact_and_return_empty(b1, b2)
+        } else {
+            panic!("Could not find two buffers to merge!");
+        }
+    }
+
+    fn compact_and_return_empty(&mut self, b1: usize, b2: usize) -> usize {
+        debug_assert!(self.lengths[b1] == BUFSIZE);
+        debug_assert!(self.lengths[b2] == BUFSIZE);
+
+        let mut tmp = [0; BUFSIZE * 2];
+        tmp[..BUFSIZE].copy_from_slice(&self.buffers[b1][..]);
+        tmp[BUFSIZE..BUFSIZE * 2].copy_from_slice(&self.buffers[b2][..]);
+        tmp.sort_unstable();
+
+        // Write surviving values to b2
+        let mut sel = rand::random::<bool>();
+        let mut idx = 0;
+        for &val in tmp.iter() {
+            if sel {
+                self.buffers[b2][idx] = val;
+                idx += 1;
+            }
+            sel = !sel;
+        }
+        self.levels[b2] += 1;
+
+        // Empty and return b1
+        self.lengths[b1] = 0;
+        self.levels[b1] = self.active_level;
+        b1
+    }
+
+    fn find_empty_buffer(&self) -> Option<usize> {
+        self.lengths.iter().position(|&len| len == 0)
+    }
+
+    fn find_buffers_to_merge(&self) -> Option<(usize, usize)> {
+        debug_assert!(self.lengths.iter().all(|&len| len == BUFSIZE));
+        let mut level_map = HashMap::with_capacity(BUFCOUNT);
+        let mut best_match = None;
+        for (b1, level) in self.levels.iter().enumerate() {
+            if let Some(b2) = level_map.insert(level, b1) {
+                best_match = match best_match {
+                    None => Some((level, b1, b2)),
+                    Some((old_level, _, _)) if level < old_level => Some((level, b1, b2)),
+                    Some(current_best) => Some(current_best),
+                }
+            }
+        }
+        best_match.map(|(_, b1, b2)| (b1, b2))
+    }
+
+    fn update_active_level(&mut self) {
+        let numerator = self.count as f64;
+        let denominator = (BUFSIZE * (1 << (BUFCOUNT - 2))) as f64;
+        let result = (numerator / denominator).log2().ceil() as i64;
+        self.active_level = max(0, result) as usize;
+        self.sampler.set_max_weight(1 << self.active_level);
+    }
+}
+
+pub struct MergableSketch {
+    count: usize,
+    data: HashMap<usize, Vec<u64>>, // level to values
+}
+
+impl MergableSketch {
+
+    fn new(count: usize, data: HashMap<usize, Vec<u64>>) -> MergableSketch {
+        MergableSketch {
+            count: count,
+            data: data,
+        }
+    }
+
+    pub fn empty() -> MergableSketch {
+        MergableSketch {
+            count: 0,
+            data: HashMap::new()
+        }
+    }
+
+    pub fn merge(&mut self, other: &MergableSketch) {
+        self.count += other.count;
+        for (level, other_values) in other.data.iter() {
+            let values = self.data.entry(*level)
+                .or_insert_with(|| Vec::new());
+            values.extend_from_slice(other_values);
+        }
+    }
+
+    pub fn to_readable(&mut self) -> ReadableSketch {
+        let mut weighted_vals = Vec::with_capacity(self.count);
+        self.data.iter().for_each(|(level, values)| {
+            let weight = 1usize << level;
+            for &val in values {
+                weighted_vals.push(WeightedValue {
+                    weight: weight,
+                    value: val,
+                });
+            }
+        });
+        ReadableSketch::new(self.count, weighted_vals)
     }
 }
 
 #[derive(Copy, Clone, Eq)]
-struct RankedValue {
+struct WeightedValue {
     value: u64,
-    rank: usize,
+    weight: usize,
 }
 
-impl Ord for RankedValue {
-    fn cmp(&self, other: &RankedValue) -> Ordering {
+impl Ord for WeightedValue {
+    fn cmp(&self, other: &WeightedValue) -> Ordering {
         self.value.cmp(&other.value)
     }
 }
 
-impl PartialOrd for RankedValue {
-    fn partial_cmp(&self, other: &RankedValue) -> Option<Ordering> {
+impl PartialOrd for WeightedValue {
+    fn partial_cmp(&self, other: &WeightedValue) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for RankedValue {
-    fn eq(&self, other: &RankedValue) -> bool {
+impl PartialEq for WeightedValue {
+    fn eq(&self, other: &WeightedValue) -> bool {
         self.value == other.value
     }
 }
 
 pub struct ReadableSketch {
-    data: Vec<RankedValue>,
+    data: Vec<(usize, u64)>,
     count: usize,
-    sealed: bool,
 }
 
 impl ReadableSketch {
-    fn new() -> ReadableSketch {
+    fn new(count: usize, mut weighted_values: Vec<WeightedValue>) -> ReadableSketch {
+        weighted_values.sort_unstable();
+        let ranked_values = weighted_values
+            .iter()
+            .scan(0, |rank, &x| {
+                let ranked_val = (*rank, x.value);
+                *rank += x.weight;
+                Some(ranked_val)
+            })
+            .collect();
+
         ReadableSketch {
-            data: Vec::new(),
-            count: 0,
-            sealed: false,
+            count: count,
+            data: ranked_values,
         }
     }
 
     pub fn query(&self, phi: f64) -> Option<u64> {
-        assert!(self.sealed);
         assert!(0.0 < phi && phi < 1.0);
         let target = phi * self.count as f64;
         let mut start = 0;
         let mut end = self.data.len();
         while end - start > 1 {
             let mid = start + (end - start) / 2;
-            let rank = self.data[mid].rank as f64;
+            let (mid_rank, mid_value) = self.data[mid];
+            let rank = mid_rank as f64;
             if target < rank {
                 end = mid;
             } else if target > rank {
                 start = mid;
             } else {
-                return Some(self.data[mid].value);
+                return Some(mid_value);
             }
         }
         if end - start == 1 {
-            Some(self.data[start].value)
+            let (_, start_value) = self.data[start];
+            Some(start_value)
         } else {
             None
         }
-    }
-
-    fn extend(&mut self, weight: usize, values: &[u64]) {
-        assert!(!self.sealed);
-        self.count += weight * values.len();
-        for v in values {
-            self.data.push(RankedValue {
-                value: *v,
-                rank: weight, // tmp store the weight here
-            });
-        }
-    }
-
-    fn seal(&mut self) {
-        self.data.sort_unstable();
-        let mut rank = 0;
-        for x in self.data.iter_mut() {
-            let weight = x.rank; // stored weight from earlier
-            x.rank = rank;
-            rank += weight;
-        }
-        self.sealed = true;
     }
 }
 
@@ -282,10 +344,10 @@ mod tests {
     fn it_merges_two_sketches_without_increasing_error() {
         let n = MEDIUM_SIZE * 2;
         let input = random_distinct_values(n);
-        let s1 = build_writable_sketch(&input[..n / 2]);
-        let mut s2 = build_writable_sketch(&input[n / 2..n]);
+        let s1 = build_mergable_sketch(&input[..n / 2]);
+        let mut s2 = build_mergable_sketch(&input[n / 2..n]);
         s2.merge(&s1);
-        let result = s2.to_readable_sketch();
+        let result = s2.to_readable();
         check_error_bound(&result, &input);
     }
 
@@ -294,14 +356,14 @@ mod tests {
         let sketch_size = MEDIUM_SIZE;
         let num_sketches = 30;
         let input = random_distinct_values(sketch_size * num_sketches);
-        let mut s = build_writable_sketch(&input[..sketch_size]);
+        let mut s = build_mergable_sketch(&input[..sketch_size]);
         for i in 1..num_sketches {
             let start = i * sketch_size;
             let end = start + sketch_size;
-            let new_sketch = build_writable_sketch(&input[start..end]);
+            let new_sketch = build_mergable_sketch(&input[start..end]);
             s.merge(&new_sketch);
         }
-        let result = s.to_readable_sketch();
+        let result = s.to_readable();
         check_error_bound(&result, &input);
     }
 
@@ -337,8 +399,11 @@ mod tests {
     }
 
     fn build_readable_sketch(input: &[u64]) -> ReadableSketch {
-        let sketch = build_writable_sketch(input);
-        sketch.to_readable_sketch()
+        build_writable_sketch(input).to_readable()
+    }
+
+    fn build_mergable_sketch(input: &[u64]) -> MergableSketch {
+        build_writable_sketch(input).to_mergable()
     }
 
     fn build_writable_sketch(input: &[u64]) -> WritableSketch {

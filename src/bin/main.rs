@@ -1,8 +1,7 @@
 extern crate caesium;
 extern crate rand;
-extern crate time;
-use caesium::quantile::sketch::{WritableSketch, ReadableSketch};
 use caesium::quantile::error::ErrorCalculator;
+use caesium::quantile::sketch::{ReadableSketch, WritableSketch, MergableSketch};
 use rand::Rng;
 use std::env;
 use std::fs::File;
@@ -38,13 +37,9 @@ fn main() -> Result<(), Error> {
     let data = read_data_file(&args.data_path)?;
     let partitions = choose_merge_partitions(data.len(), args.num_merges);
 
-    let (writable_sketch, duration) = build_sketch(&data, &partitions[..]);
-    summarize_space(&writable_sketch);
-    summarize_time(data.len(), duration);
-
-    let readable_sketch = writable_sketch.to_readable_sketch();
+    let sketch = build_sketch(&data, &partitions[..]);
     let calc = ErrorCalculator::new(&data);
-    summarize_error(&calc, &readable_sketch);
+    summarize_error(&calc, &sketch);
 
     Ok(())
 }
@@ -91,7 +86,7 @@ fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
     candidates.iter().take(num_merges).map(|x| *x).collect()
 }
 
-fn build_sketch(data: &[u64], partitions: &[usize]) -> (WritableSketch, u64) {
+fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
     debug_assert!(partitions.len() <= data.len());
     debug_assert!(partitions.iter().all(|p| *p < data.len()));
     let mut sorted_partitions = Vec::with_capacity(partitions.len());
@@ -99,9 +94,8 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> (WritableSketch, u64) {
     sorted_partitions.sort_unstable();
 
     let mut tmp = WritableSketch::new();
-    let mut result = WritableSketch::new();
+    let mut result = MergableSketch::empty();
     let mut b = 0;
-    let start_ns = time::precise_time_ns();
     data.iter().enumerate().for_each(|(idx, val)| {
         let cutoff = match sorted_partitions.get(b) {
             None => data.len() - 1,
@@ -109,21 +103,12 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> (WritableSketch, u64) {
         };
         tmp.insert(*val);
         if idx >= cutoff {
-            result.merge(&tmp);
+            result.merge(&tmp.to_mergable());
             tmp.reset();
             b += 1;
         }
     });
-    let duration = time::precise_time_ns() - start_ns;
-    (result, duration)
-}
-
-fn summarize_space(sketch: &WritableSketch) {
-    println!("Sketch size: {} bytes", sketch.size_in_bytes());
-}
-
-fn summarize_time(n: usize, duration: u64) {
-    println!("Inserted {} values in {} ns", n, duration);
+    result.to_readable()
 }
 
 fn summarize_error(calc: &ErrorCalculator, sketch: &ReadableSketch) {

@@ -6,7 +6,6 @@ authors = ["Will Daly"]
 [dependencies]
 rand = "0.4"
 bencher = "0.1.5"
-time = "0.1"
 
 [[bench]]
 name = "quantile"

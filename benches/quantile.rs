@@ -4,7 +4,7 @@ extern crate caesium;
 extern crate rand;
 
 use bencher::Bencher;
-use caesium::quantile::sketch::{WritableSketch, ReadableSketch};
+use caesium::quantile::sketch::{ReadableSketch, WritableSketch};
 use rand::Rng;
 
 fn insert_sequential(sketch: &mut WritableSketch, n: usize) {
@@ -32,7 +32,7 @@ fn random_values(n: usize) -> Vec<u64> {
 fn build_readable_sketch(n: usize) -> ReadableSketch {
     let mut sketch = WritableSketch::new();
     insert_random(&mut sketch, n);
-    sketch.to_readable_sketch()
+    sketch.to_readable()
 }
 
 fn bench_insert_one_empty(bench: &mut Bencher) {
@@ -89,18 +89,22 @@ fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
 
 fn bench_merge_two_sketches_sequential_data(bench: &mut Bencher) {
     let mut s1 = WritableSketch::new();
-    insert_sequential(&mut s1, 4096);
     let mut s2 = WritableSketch::new();
+    insert_sequential(&mut s1, 4096);
     insert_sequential(&mut s2, 4096);
-    bench.iter(|| s1.merge(&s2))
+    let mut m1 = s1.to_mergable();
+    let m2 = s2.to_mergable();
+    bench.iter(|| m1.merge(&m2))
 }
 
 fn bench_merge_two_sketches_random_data(bench: &mut Bencher) {
     let mut s1 = WritableSketch::new();
-    insert_random(&mut s1, 4096);
     let mut s2 = WritableSketch::new();
+    insert_random(&mut s1, 4096);
     insert_random(&mut s2, 4096);
-    bench.iter(|| s1.merge(&s2))
+    let mut m1 = s1.to_mergable();
+    let m2 = s2.to_mergable();
+    bench.iter(|| m1.merge(&m2))
 }
 
 benchmark_group!(
