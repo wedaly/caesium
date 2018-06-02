@@ -172,9 +172,10 @@ pub struct MergableSketch {
 const LEVEL_CAPACITY: usize = BUFSIZE * BUFCOUNT;
 
 impl MergableSketch {
-    fn new(count: usize, levels: Vec<Vec<u64>>) -> MergableSketch {
+    fn new(count: usize, mut levels: Vec<Vec<u64>>) -> MergableSketch {
         let size = MergableSketch::calculate_size(&levels);
         let capacity = MergableSketch::calculate_capacity(&levels);
+        levels.iter_mut().for_each(|values| values.sort_unstable());
         MergableSketch {
             count: count,
             size: size,
@@ -228,7 +229,7 @@ impl MergableSketch {
 
         // Concat other's data into self
         for (mut dst, src) in self.levels.iter_mut().zip(other.levels.iter()) {
-            dst.extend_from_slice(&src);
+            MergableSketch::merge_sorted(&src, &mut dst);
         }
 
         // Size and capacity may have change, since we added levels and inserted vals
@@ -259,14 +260,35 @@ impl MergableSketch {
         self.update_size_and_capacity();
     }
 
-    fn compact(src: &mut Vec<u64>, dst: &mut Vec<u64>) {
+    fn merge_sorted(src: &[u64], dst: &mut Vec<u64>) {
+        let mut tmp = Vec::with_capacity(src.len() + dst.len());
+        let (mut i, mut j) = (0, 0);
+        let (n, m) = (src.len(), dst.len());
+        while i < n && j < m {
+            let lt = src[i] < dst[j];
+            let src_mask = !(lt as u64).wrapping_sub(1);
+            let dst_mask = !(!lt as u64).wrapping_sub(1);
+            let val = (src[i] & src_mask) | (dst[j] & dst_mask);
+            tmp.push(val);
+            i += lt as usize;
+            j += !lt as usize;
+        }
+
+        tmp.extend_from_slice(&src[i..n]);
+        tmp.extend_from_slice(&dst[j..m]);
+        dst.clear();
+        dst.extend_from_slice(&tmp[..]);
+    }
+
+    fn compact(src: &mut Vec<u64>, mut dst: &mut Vec<u64>) {
         let mut sel = rand::random::<bool>();
-        for v in src.iter() {
+        for idx in 0..src.len() {
             if sel {
-                dst.push(*v);
+                src[idx / 2] = src[idx];
             }
             sel = !sel;
         }
+        MergableSketch::merge_sorted(&src[..src.len() / 2], &mut dst);
         src.clear();
     }
 
