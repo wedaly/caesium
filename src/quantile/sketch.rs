@@ -54,18 +54,21 @@ impl WritableSketch {
     }
 
     pub fn to_mergable(&self) -> MergableSketch {
-        let mut level_map: HashMap<usize, Vec<u64>> = HashMap::with_capacity(BUFCOUNT);
+        let mut levels: Vec<Vec<u64>> = Vec::with_capacity(BUFCOUNT);
+        let max_level = self.levels.iter().max().unwrap_or(&0);
+        for _ in 0..(max_level + 1) {
+            levels.push(Vec::new());
+        }
+
         for idx in 0..BUFCOUNT {
             let len = self.lengths[idx];
             if len > 0 {
                 let level = self.levels[idx];
-                let values = level_map
-                    .entry(level)
-                    .or_insert_with(|| Vec::new());
-                values.extend_from_slice(&self.buffers[idx][..len]);
+                levels[level].extend_from_slice(&self.buffers[idx][..len]);
             }
         }
-        MergableSketch::new(self.count, level_map)
+
+        MergableSketch::new(self.count, levels)
     }
 
     pub fn to_readable(&self) -> ReadableSketch {
@@ -160,38 +163,46 @@ impl WritableSketch {
 }
 
 pub struct MergableSketch {
-    count: usize,
-    data: HashMap<usize, Vec<u64>>, // level to values
+    count: usize, // from original datastream
+    size: usize,  // count of stored values
+    capacity: usize,
+    levels: Vec<Vec<u64>>,
 }
 
-impl MergableSketch {
+const LEVEL_CAPACITY: usize = BUFSIZE * BUFCOUNT;
 
-    fn new(count: usize, data: HashMap<usize, Vec<u64>>) -> MergableSketch {
+impl MergableSketch {
+    fn new(count: usize, levels: Vec<Vec<u64>>) -> MergableSketch {
+        let size = MergableSketch::calculate_size(&levels);
+        let capacity = MergableSketch::calculate_capacity(&levels);
         MergableSketch {
             count: count,
-            data: data,
+            size: size,
+            capacity: capacity,
+            levels: levels,
         }
     }
 
     pub fn empty() -> MergableSketch {
         MergableSketch {
             count: 0,
-            data: HashMap::new()
+            size: 0,
+            capacity: 0,
+            levels: Vec::new(),
         }
     }
 
     pub fn merge(&mut self, other: &MergableSketch) {
-        self.count += other.count;
-        for (level, other_values) in other.data.iter() {
-            let values = self.data.entry(*level)
-                .or_insert_with(|| Vec::new());
-            values.extend_from_slice(other_values);
+        self.insert_from_other(other);
+        while self.size > self.capacity {
+            self.compress();
         }
     }
 
     pub fn to_readable(&mut self) -> ReadableSketch {
-        let mut weighted_vals = Vec::with_capacity(self.count);
-        self.data.iter().for_each(|(level, values)| {
+        debug_assert!(self.levels.len() - 1 < 64);
+        let mut weighted_vals = Vec::with_capacity(self.size);
+        self.levels.iter().enumerate().for_each(|(level, values)| {
             let weight = 1usize << level;
             for &val in values {
                 weighted_vals.push(WeightedValue {
@@ -201,6 +212,75 @@ impl MergableSketch {
             }
         });
         ReadableSketch::new(self.count, weighted_vals)
+    }
+
+    fn insert_from_other(&mut self, other: &MergableSketch) {
+        self.count += other.count;
+
+        // Add levels if necessary
+        if other.levels.len() > self.levels.len() {
+            let levels_to_grow = other.levels.len() - self.levels.len();
+            for _ in 0..levels_to_grow {
+                self.levels.push(Vec::new());
+            }
+        }
+        debug_assert!(self.levels.len() >= other.levels.len());
+
+        // Concat other's data into self
+        for (mut dst, src) in self.levels.iter_mut().zip(other.levels.iter()) {
+            dst.extend_from_slice(&src);
+        }
+
+        // Size and capacity may have change, since we added levels and inserted vals
+        self.update_size_and_capacity();
+    }
+
+    fn compress(&mut self) {
+        debug_assert!(self.levels.len() > 0);
+        debug_assert!(self.size > self.capacity);
+
+        let mut tmp = Vec::new();
+        for mut values in self.levels.iter_mut() {
+            if tmp.len() > 0 {
+                values.extend_from_slice(&tmp);
+                tmp.clear();
+                break;
+            }
+
+            if values.len() > LEVEL_CAPACITY {
+                MergableSketch::compact(&mut values, &mut tmp);
+            }
+        }
+
+        if tmp.len() > 0 {
+            self.levels.push(tmp);
+        }
+
+        self.update_size_and_capacity();
+    }
+
+    fn compact(src: &mut Vec<u64>, dst: &mut Vec<u64>) {
+        let mut sel = rand::random::<bool>();
+        for v in src.iter() {
+            if sel {
+                dst.push(*v);
+            }
+            sel = !sel;
+        }
+        src.clear();
+    }
+
+    fn update_size_and_capacity(&mut self) {
+        self.capacity = MergableSketch::calculate_capacity(&self.levels);
+        self.size = MergableSketch::calculate_size(&self.levels);
+    }
+
+    fn calculate_size(levels: &Vec<Vec<u64>>) -> usize {
+        levels.iter().map(|values| values.len()).sum()
+    }
+
+    fn calculate_capacity(levels: &Vec<Vec<u64>>) -> usize {
+        levels.len() * LEVEL_CAPACITY
     }
 }
 
@@ -249,6 +329,10 @@ impl ReadableSketch {
             count: count,
             data: ranked_values,
         }
+    }
+
+    pub fn size(&self) -> usize {
+        self.data.len()
     }
 
     pub fn query(&self, phi: f64) -> Option<u64> {

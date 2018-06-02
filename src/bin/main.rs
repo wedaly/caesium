@@ -1,7 +1,7 @@
 extern crate caesium;
 extern crate rand;
 use caesium::quantile::error::ErrorCalculator;
-use caesium::quantile::sketch::{ReadableSketch, WritableSketch, MergableSketch};
+use caesium::quantile::sketch::{MergableSketch, ReadableSketch, WritableSketch};
 use rand::Rng;
 use std::env;
 use std::fs::File;
@@ -38,6 +38,7 @@ fn main() -> Result<(), Error> {
     let partitions = choose_merge_partitions(data.len(), args.num_merges);
 
     let sketch = build_sketch(&data, &partitions[..]);
+    summarize_size(&sketch);
     let calc = ErrorCalculator::new(&data);
     summarize_error(&calc, &sketch);
 
@@ -109,6 +110,10 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
         }
     });
     result.to_readable()
+}
+
+fn summarize_size(sketch: &ReadableSketch) {
+    println!("size={}", sketch.size());
 }
 
 fn summarize_error(calc: &ErrorCalculator, sketch: &ReadableSketch) {
