@@ -169,7 +169,9 @@ pub struct MergableSketch {
     levels: Vec<Vec<u64>>,
 }
 
-const LEVEL_CAPACITY: usize = BUFSIZE * BUFCOUNT;
+const MAX_LEVEL_CAPACITY: usize = BUFSIZE * BUFCOUNT;
+const MIN_LEVEL_CAPACITY: usize = 8;
+const CAPACITY_DECAY: f32 = 2.0 / 3.0;
 
 impl MergableSketch {
     fn new(count: usize, mut levels: Vec<Vec<u64>>) -> MergableSketch {
@@ -240,15 +242,16 @@ impl MergableSketch {
         debug_assert!(self.levels.len() > 0);
         debug_assert!(self.size > self.capacity);
 
+        let max_level = self.levels.len() - 1;
         let mut tmp = Vec::new();
-        for mut values in self.levels.iter_mut() {
+        for (level, mut values) in self.levels.iter_mut().enumerate() {
             if tmp.len() > 0 {
                 values.extend_from_slice(&tmp);
                 tmp.clear();
                 break;
             }
 
-            if values.len() > LEVEL_CAPACITY {
+            if values.len() > MergableSketch::capacity_at_level(level, max_level) {
                 MergableSketch::compact(&mut values, &mut tmp);
             }
         }
@@ -302,7 +305,20 @@ impl MergableSketch {
     }
 
     fn calculate_capacity(levels: &Vec<Vec<u64>>) -> usize {
-        levels.len() * LEVEL_CAPACITY
+        if levels.len() == 0 {
+            0
+        } else {
+            let max_level = levels.len() - 1;
+            (0..levels.len()).map(|level| MergableSketch::capacity_at_level(level, max_level)).sum()
+        }
+    }
+
+    fn capacity_at_level(level: usize, max_level: usize) -> usize {
+        debug_assert!(level <= max_level);
+        let depth = max_level - level;
+        let decay = CAPACITY_DECAY.powf(depth as f32);
+        let calculated_cap = (MAX_LEVEL_CAPACITY as f32 * decay).ceil() as usize;
+        max(MIN_LEVEL_CAPACITY, calculated_cap)
     }
 }
 
