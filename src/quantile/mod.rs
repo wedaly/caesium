@@ -78,7 +78,7 @@ mod tests {
         let s1 = build_mergable_sketch(&input[..n / 2]);
         let mut s2 = build_mergable_sketch(&input[n / 2..n]);
         s2.merge(&s1);
-        let result = ReadableSketch::from_mergable(&s2);
+        let result = s2.to_readable();
         check_error_bound(&result, &input);
     }
 
@@ -94,7 +94,7 @@ mod tests {
             let new_sketch = build_mergable_sketch(&input[start..end]);
             s.merge(&new_sketch);
         }
-        let result = ReadableSketch::from_mergable(&s);
+        let result = s.to_readable();
         check_error_bound(&result, &input);
     }
 
@@ -131,12 +131,12 @@ mod tests {
 
     fn build_readable_sketch(input: &[u64]) -> ReadableSketch {
         let s = build_writable_sketch(input);
-        ReadableSketch::from_serializable(&s.to_serializable())
+        s.to_serializable().to_readable()
     }
 
     fn build_mergable_sketch(input: &[u64]) -> MergableSketch {
         let s = build_writable_sketch(input);
-        MergableSketch::from_serializable(&s.to_serializable())
+        s.to_serializable().to_mergable()
     }
 
     fn build_writable_sketch(input: &[u64]) -> WritableSketch {

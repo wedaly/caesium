@@ -55,22 +55,20 @@ impl WritableSketch {
     pub fn to_serializable(&self) -> SerializableSketch {
         let max_level = self.levels.iter().max().unwrap_or(&0);
         let mut levels: Vec<Vec<u64>> = Vec::new();
-        for _ in 0..max_level+1 {
+        for _ in 0..max_level + 1 {
             levels.push(Vec::new())
         }
 
         for idx in 0..BUFCOUNT {
             let len = self.lengths[idx];
             let level = self.levels[idx];
-            levels.get_mut(level)
+            levels
+                .get_mut(level)
                 .expect("Could not retrieve level")
                 .extend_from_slice(&self.buffers[idx][..len]);
         }
 
-        let mut s = SerializableSketch::new();
-        s.set_count(self.count);
-        levels.iter().for_each(|l| s.add_level(l, false));
-        s
+        SerializableSketch::new(self.count, levels)
     }
 
     fn choose_insert_buffer(&mut self) -> usize {

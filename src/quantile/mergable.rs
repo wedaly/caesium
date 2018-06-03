@@ -1,7 +1,7 @@
 use quantile::constants::{CAPACITY_DECAY, MAX_LEVEL_CAPACITY, MIN_LEVEL_CAPACITY};
-use quantile::serializable::SerializableSketch;
 use rand;
 use std::cmp::max;
+use quantile::readable::ReadableSketch;
 
 pub struct MergableSketch {
     count: usize, // from original datastream
@@ -11,7 +11,7 @@ pub struct MergableSketch {
 }
 
 impl MergableSketch {
-    fn new(count: usize, sorted_levels: Vec<Vec<u64>>) -> MergableSketch {
+    pub fn new(count: usize, sorted_levels: Vec<Vec<u64>>) -> MergableSketch {
         let size = MergableSketch::calculate_size(&sorted_levels);
         let capacity = MergableSketch::calculate_capacity(&sorted_levels);
         MergableSketch {
@@ -22,25 +22,20 @@ impl MergableSketch {
         }
     }
 
+    pub fn empty() -> MergableSketch {
+        MergableSketch::new(0, Vec::new())
+    }
+
+    pub fn to_readable(&self) -> ReadableSketch {
+        let weighted_vals = self.sorted_levels.iter()
+            .enumerate()
+            .flat_map(|(level, values)| ReadableSketch::weighted_values_for_level(level, &values))
+            .collect();
+        ReadableSketch::new(self.count, weighted_vals)
+    }
+
     pub fn count(&self) -> usize {
         self.count
-    }
-
-    pub fn sorted_levels(&self) -> &Vec<Vec<u64>> {
-        &self.sorted_levels
-    }
-
-    pub fn from_serializable(s: &SerializableSketch) -> MergableSketch {
-        MergableSketch::new(s.count(), s.sorted_levels().to_vec())
-    }
-
-    pub fn empty() -> MergableSketch {
-        MergableSketch {
-            count: 0,
-            size: 0,
-            capacity: 0,
-            sorted_levels: Vec::new(),
-        }
     }
 
     pub fn merge(&mut self, other: &MergableSketch) {

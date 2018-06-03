@@ -106,12 +106,12 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
         };
         tmp.insert(*val);
         if idx >= cutoff {
-            result.merge(&MergableSketch::from_serializable(&tmp.to_serializable()));
+            result.merge(&tmp.to_serializable().to_mergable());
             tmp.reset();
             b += 1;
         }
     });
-    ReadableSketch::from_mergable(&result)
+    result.to_readable()
 }
 
 fn summarize_size(sketch: &ReadableSketch) {

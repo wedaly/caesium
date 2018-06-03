@@ -1,11 +1,10 @@
 #[macro_use]
 extern crate bencher;
-extern crate bincode;
 extern crate caesium;
 extern crate rand;
 
 use bencher::Bencher;
-use bincode::{deserialize, serialize};
+use caesium::encode::encodable::{Decodable, Encodable};
 use caesium::quantile::mergable::MergableSketch;
 use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::serializable::SerializableSketch;
@@ -46,12 +45,12 @@ fn build_writable_sketch(n: usize, randomize: bool) -> WritableSketch {
 
 fn build_mergable_sketch(n: usize, randomize: bool) -> MergableSketch {
     let s = build_writable_sketch(n, randomize);
-    MergableSketch::from_serializable(&s.to_serializable())
+    s.to_serializable().to_mergable()
 }
 
 fn build_readable_sketch(n: usize) -> ReadableSketch {
     let s = build_writable_sketch(n, true);
-    ReadableSketch::from_serializable(&s.to_serializable())
+    s.to_serializable().to_readable()
 }
 
 fn build_serializable_sketch(n: usize) -> SerializableSketch {
@@ -128,28 +127,17 @@ fn bench_writable_to_serializable(bench: &mut Bencher) {
     bench.iter(|| s.to_serializable())
 }
 
-fn bench_mergable_from_serializable(bench: &mut Bencher) {
-    let s = build_serializable_sketch(4096);
-    bench.iter(|| MergableSketch::from_serializable(&s))
-}
-
-fn bench_readable_from_serializable(bench: &mut Bencher) {
-    let s = build_serializable_sketch(4096);
-    bench.iter(|| ReadableSketch::from_serializable(&s))
-}
-
 fn bench_serializable_to_bytes(bench: &mut Bencher) {
     let s = build_serializable_sketch(4096);
-    bench.iter(|| serialize(&s))
+    let mut writer = Vec::new();
+    bench.iter(|| s.encode(&mut writer))
 }
 
 fn bench_serializable_from_bytes(bench: &mut Bencher) {
     let s = build_serializable_sketch(4096);
-    let bytes: Vec<u8> = serialize(&s).unwrap();
-    bench.iter(|| {
-        let x: SerializableSketch = deserialize(&bytes).unwrap();
-        x
-    })
+    let mut v: Vec<u8> = Vec::new();
+    s.encode(&mut v).unwrap();
+    bench.iter(|| SerializableSketch::decode(&mut &v[..]).unwrap())
 }
 
 benchmark_group!(
@@ -165,8 +153,6 @@ benchmark_group!(
     bench_merge_two_sketches_sequential_data,
     bench_merge_two_sketches_random_data,
     bench_writable_to_serializable,
-    bench_mergable_from_serializable,
-    bench_readable_from_serializable,
     bench_serializable_to_bytes,
     bench_serializable_from_bytes
 );
