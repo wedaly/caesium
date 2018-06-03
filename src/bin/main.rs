@@ -1,7 +1,9 @@
 extern crate caesium;
 extern crate rand;
 use caesium::quantile::error::ErrorCalculator;
-use caesium::quantile::sketch::{MergableSketch, ReadableSketch, WritableSketch};
+use caesium::quantile::mergable::MergableSketch;
+use caesium::quantile::readable::ReadableSketch;
+use caesium::quantile::writable::WritableSketch;
 use rand::Rng;
 use std::env;
 use std::fs::File;
@@ -104,12 +106,12 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
         };
         tmp.insert(*val);
         if idx >= cutoff {
-            result.merge(&tmp.to_mergable());
+            result.merge(&MergableSketch::from_serializable(&tmp.to_serializable()));
             tmp.reset();
             b += 1;
         }
     });
-    result.to_readable()
+    ReadableSketch::from_mergable(&result)
 }
 
 fn summarize_size(sketch: &ReadableSketch) {

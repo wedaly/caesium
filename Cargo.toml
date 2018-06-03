@@ -5,6 +5,9 @@ authors = ["Will Daly"]
 
 [dependencies]
 rand = "0.4"
+bincode = "1.0.0"
+serde = "1.0.65"
+serde_derive = "1.0.65"
 bencher = "0.1.5"
 
 [[bench]]

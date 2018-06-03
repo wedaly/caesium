@@ -1,10 +1,15 @@
 #[macro_use]
 extern crate bencher;
+extern crate bincode;
 extern crate caesium;
 extern crate rand;
 
 use bencher::Bencher;
-use caesium::quantile::sketch::{ReadableSketch, WritableSketch};
+use bincode::{deserialize, serialize};
+use caesium::quantile::mergable::MergableSketch;
+use caesium::quantile::readable::ReadableSketch;
+use caesium::quantile::serializable::SerializableSketch;
+use caesium::quantile::writable::WritableSketch;
 use rand::Rng;
 
 fn insert_sequential(sketch: &mut WritableSketch, n: usize) {
@@ -29,10 +34,29 @@ fn random_values(n: usize) -> Vec<u64> {
     result
 }
 
+fn build_writable_sketch(n: usize, randomize: bool) -> WritableSketch {
+    let mut s = WritableSketch::new();
+    if randomize {
+        insert_random(&mut s, n);
+    } else {
+        insert_sequential(&mut s, n);
+    }
+    s
+}
+
+fn build_mergable_sketch(n: usize, randomize: bool) -> MergableSketch {
+    let s = build_writable_sketch(n, randomize);
+    MergableSketch::from_serializable(&s.to_serializable())
+}
+
 fn build_readable_sketch(n: usize) -> ReadableSketch {
-    let mut sketch = WritableSketch::new();
-    insert_random(&mut sketch, n);
-    sketch.to_readable()
+    let s = build_writable_sketch(n, true);
+    ReadableSketch::from_serializable(&s.to_serializable())
+}
+
+fn build_serializable_sketch(n: usize) -> SerializableSketch {
+    let s = build_writable_sketch(n, true);
+    s.to_serializable()
 }
 
 fn bench_insert_one_empty(bench: &mut Bencher) {
@@ -88,23 +112,44 @@ fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
 }
 
 fn bench_merge_two_sketches_sequential_data(bench: &mut Bencher) {
-    let mut s1 = WritableSketch::new();
-    let mut s2 = WritableSketch::new();
-    insert_sequential(&mut s1, 4096);
-    insert_sequential(&mut s2, 4096);
-    let mut m1 = s1.to_mergable();
-    let m2 = s2.to_mergable();
+    let mut m1 = build_mergable_sketch(4096, false);
+    let m2 = build_mergable_sketch(4096, false);
     bench.iter(|| m1.merge(&m2))
 }
 
 fn bench_merge_two_sketches_random_data(bench: &mut Bencher) {
-    let mut s1 = WritableSketch::new();
-    let mut s2 = WritableSketch::new();
-    insert_random(&mut s1, 4096);
-    insert_random(&mut s2, 4096);
-    let mut m1 = s1.to_mergable();
-    let m2 = s2.to_mergable();
+    let mut m1 = build_mergable_sketch(4096, true);
+    let m2 = build_mergable_sketch(4096, true);
     bench.iter(|| m1.merge(&m2))
+}
+
+fn bench_writable_to_serializable(bench: &mut Bencher) {
+    let s = build_writable_sketch(4096, false);
+    bench.iter(|| s.to_serializable())
+}
+
+fn bench_mergable_from_serializable(bench: &mut Bencher) {
+    let s = build_serializable_sketch(4096);
+    bench.iter(|| MergableSketch::from_serializable(&s))
+}
+
+fn bench_readable_from_serializable(bench: &mut Bencher) {
+    let s = build_serializable_sketch(4096);
+    bench.iter(|| ReadableSketch::from_serializable(&s))
+}
+
+fn bench_serializable_to_bytes(bench: &mut Bencher) {
+    let s = build_serializable_sketch(4096);
+    bench.iter(|| serialize(&s))
+}
+
+fn bench_serializable_from_bytes(bench: &mut Bencher) {
+    let s = build_serializable_sketch(4096);
+    let bytes: Vec<u8> = serialize(&s).unwrap();
+    bench.iter(|| {
+        let x: SerializableSketch = deserialize(&bytes).unwrap();
+        x
+    })
 }
 
 benchmark_group!(
@@ -119,5 +164,10 @@ benchmark_group!(
     bench_query_full_sketch_nine_tenths,
     bench_merge_two_sketches_sequential_data,
     bench_merge_two_sketches_random_data,
+    bench_writable_to_serializable,
+    bench_mergable_from_serializable,
+    bench_readable_from_serializable,
+    bench_serializable_to_bytes,
+    bench_serializable_from_bytes
 );
 benchmark_main!(benches);
