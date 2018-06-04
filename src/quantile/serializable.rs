@@ -6,7 +6,7 @@ use quantile::mergable::MergableSketch;
 #[derive(Debug, PartialEq)]
 pub struct SerializableSketch {
     count: usize,
-    levels: Vec<Vec<u64>>,
+    sorted_levels: Vec<Vec<u64>>,
 }
 
 impl SerializableSketch {
@@ -14,16 +14,16 @@ impl SerializableSketch {
         levels.iter_mut().for_each(|values| values.sort_unstable());
         SerializableSketch {
             count: count,
-            levels: levels,
+            sorted_levels: levels,
         }
     }
 
     pub fn to_mergable(self) -> MergableSketch {
-        MergableSketch::new(self.count, self.levels)
+        MergableSketch::new(self.count, self.sorted_levels)
     }
 
     pub fn to_readable(self) -> ReadableSketch {
-        let weighted_vals = self.levels.iter()
+        let weighted_vals = self.sorted_levels.iter()
             .enumerate()
             .flat_map(|(level, values)| ReadableSketch::weighted_values_for_level(level, &values))
             .collect();
@@ -37,7 +37,7 @@ where
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         (self.count as u64).encode(writer)?;
-        self.levels.encode(writer)?;
+        self.sorted_levels.encode(writer)?;
         Ok(())
     }
 }
@@ -49,7 +49,7 @@ where
     fn decode(reader: &mut R) -> Result<SerializableSketch, EncodableError> {
         let s = SerializableSketch {
             count:  usize::decode(reader)?,
-            levels: Vec::<Vec<u64>>::decode(reader)?,
+            sorted_levels: Vec::<Vec<u64>>::decode(reader)?,
         };
         Ok(s)
     }
