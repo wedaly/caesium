@@ -1,3 +1,4 @@
+use quantile::block::Block;
 use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
 
 #[derive(Copy, Clone, Eq)]
@@ -30,7 +31,8 @@ pub struct ReadableSketch {
 }
 
 impl ReadableSketch {
-    pub fn new(count: usize, mut weighted_vals: Vec<WeightedValue>) -> ReadableSketch {
+    pub fn new(count: usize, levels: &Vec<Block>) -> ReadableSketch {
+        let mut weighted_vals = ReadableSketch::calculate_weighted_values(levels);
         let ranked_vals = ReadableSketch::calculate_ranked_vals(&mut weighted_vals);
         ReadableSketch {
             count: count,
@@ -67,15 +69,18 @@ impl ReadableSketch {
         }
     }
 
-    pub fn weighted_values_for_level(level: usize, values: &Vec<u64>) -> Vec<WeightedValue> {
-        let weight = 1 << level;
-        values
-            .iter()
-            .map(|&v| WeightedValue {
-                weight: weight,
-                value: v,
-            })
-            .collect()
+    fn calculate_weighted_values(levels: &Vec<Block>) -> Vec<WeightedValue> {
+        let mut result = Vec::new();
+        for (level, block) in levels.iter().enumerate() {
+            let weight = 1 << level;
+            for &value in block.iter_sorted_values() {
+                result.push(WeightedValue {
+                    weight: weight,
+                    value: value,
+                });
+            }
+        }
+        result
     }
 
     fn calculate_ranked_vals(weighted_vals: &mut Vec<WeightedValue>) -> Vec<(usize, u64)> {

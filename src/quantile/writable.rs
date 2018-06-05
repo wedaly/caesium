@@ -1,3 +1,4 @@
+use quantile::block::Block;
 use quantile::constants::{BUFCOUNT, BUFSIZE};
 use quantile::sampler::Sampler;
 use quantile::serializable::SerializableSketch;
@@ -54,9 +55,9 @@ impl WritableSketch {
 
     pub fn to_serializable(&self) -> SerializableSketch {
         let max_level = self.levels.iter().max().unwrap_or(&0);
-        let mut levels: Vec<Vec<u64>> = Vec::new();
+        let mut levels: Vec<Block> = Vec::new();
         for _ in 0..max_level + 1 {
-            levels.push(Vec::new())
+            levels.push(Block::new())
         }
 
         for idx in 0..BUFCOUNT {
@@ -65,7 +66,7 @@ impl WritableSketch {
             levels
                 .get_mut(level)
                 .expect("Could not retrieve level")
-                .extend_from_slice(&self.buffers[idx][..len]);
+                .insert_unsorted_values(&self.buffers[idx][..len]);
         }
 
         SerializableSketch::new(self.count, levels)

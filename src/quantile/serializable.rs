@@ -1,4 +1,5 @@
 use encode::{Decodable, Encodable, EncodableError};
+use quantile::block::Block;
 use quantile::mergable::MergableSketch;
 use quantile::readable::ReadableSketch;
 use std::io::{Read, Write};
@@ -6,29 +7,23 @@ use std::io::{Read, Write};
 #[derive(Debug, PartialEq)]
 pub struct SerializableSketch {
     count: usize,
-    sorted_levels: Vec<Vec<u64>>,
+    levels: Vec<Block>,
 }
 
 impl SerializableSketch {
-    pub fn new(count: usize, mut levels: Vec<Vec<u64>>) -> SerializableSketch {
-        levels.iter_mut().for_each(|values| values.sort_unstable());
+    pub fn new(count: usize, levels: Vec<Block>) -> SerializableSketch {
         SerializableSketch {
             count: count,
-            sorted_levels: levels,
+            levels: levels,
         }
     }
 
     pub fn to_mergable(self) -> MergableSketch {
-        MergableSketch::new(self.count, self.sorted_levels)
+        MergableSketch::new(self.count, self.levels)
     }
 
     pub fn to_readable(self) -> ReadableSketch {
-        let weighted_vals = self.sorted_levels
-            .iter()
-            .enumerate()
-            .flat_map(|(level, values)| ReadableSketch::weighted_values_for_level(level, &values))
-            .collect();
-        ReadableSketch::new(self.count, weighted_vals)
+        ReadableSketch::new(self.count, &self.levels)
     }
 }
 
@@ -38,7 +33,7 @@ where
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         (self.count as u64).encode(writer)?;
-        self.sorted_levels.encode(writer)?;
+        self.levels.encode(writer)?;
         Ok(())
     }
 }
@@ -50,7 +45,7 @@ where
     fn decode(reader: &mut R) -> Result<SerializableSketch, EncodableError> {
         let s = SerializableSketch {
             count: usize::decode(reader)?,
-            sorted_levels: Vec::<Vec<u64>>::decode(reader)?,
+            levels: Vec::<Block>::decode(reader)?,
         };
         Ok(s)
     }
@@ -69,7 +64,10 @@ mod tests {
     #[test]
     fn it_serializes_and_deserializes_nonempty() {
         let count = 6;
-        let levels = vec![vec![1, 2, 3], vec![4, 5, 6]];
+        let levels = vec![
+            Block::from_sorted_values(&vec![1, 2, 3]),
+            Block::from_sorted_values(&vec![4, 5, 6]),
+        ];
         let s = SerializableSketch::new(count, levels);
         assert_encode_and_decode(&s);
     }

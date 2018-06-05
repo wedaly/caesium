@@ -1,4 +1,6 @@
 pub mod int;
+
+#[macro_use]
 pub mod vec;
 
 use std::io::Error as IOError;
