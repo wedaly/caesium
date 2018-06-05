@@ -13,7 +13,7 @@ const LARGE_SIZE: usize = SMALL_SIZE * 100;
 #[test]
 fn it_handles_query_with_no_values() {
     let input = Vec::new();
-    let s = build_readable_sketch(&input);
+    let mut s = build_readable_sketch(&input);
     if let Some(_) = s.query(0.1) {
         panic!("expected no result!");
     }
@@ -22,43 +22,43 @@ fn it_handles_query_with_no_values() {
 #[test]
 fn it_handles_small_distinct_ordered_input() {
     let input = sequential_values(SMALL_SIZE);
-    let s = build_readable_sketch(&input);
-    check_error_bound(&s, &input);
+    let mut s = build_readable_sketch(&input);
+    check_error_bound(&mut s, &input);
 }
 
 #[test]
 fn it_handles_small_distinct_unordered_input() {
     let input = random_distinct_values(SMALL_SIZE);
-    let s = build_readable_sketch(&input);
-    check_error_bound(&s, &input);
+    let mut s = build_readable_sketch(&input);
+    check_error_bound(&mut s, &input);
 }
 
 #[test]
 fn it_handles_small_input_with_duplicates() {
     let input = random_duplicate_values(SMALL_SIZE);
-    let s = build_readable_sketch(&input);
-    check_error_bound(&s, &input);
+    let mut s = build_readable_sketch(&input);
+    check_error_bound(&mut s, &input);
 }
 
 #[test]
 fn it_handles_large_distinct_ordered_input() {
     let input = sequential_values(LARGE_SIZE);
-    let s = build_readable_sketch(&input);
-    check_error_bound(&s, &input);
+    let mut s = build_readable_sketch(&input);
+    check_error_bound(&mut s, &input);
 }
 
 #[test]
 fn it_handles_large_distinct_unordered_input() {
     let input = random_distinct_values(LARGE_SIZE);
-    let s = build_readable_sketch(&input);
-    check_error_bound(&s, &input);
+    let mut s = build_readable_sketch(&input);
+    check_error_bound(&mut s, &input);
 }
 
 #[test]
 fn it_handles_large_input_with_duplicates() {
     let input = random_duplicate_values(LARGE_SIZE);
-    let s = build_readable_sketch(&input);
-    check_error_bound(&s, &input);
+    let mut s = build_readable_sketch(&input);
+    check_error_bound(&mut s, &input);
 }
 
 #[test]
@@ -68,8 +68,8 @@ fn it_merges_two_sketches_without_increasing_error() {
     let s1 = build_mergable_sketch(&input[..n / 2]);
     let mut s2 = build_mergable_sketch(&input[n / 2..n]);
     s2.merge(&s1);
-    let result = s2.to_readable();
-    check_error_bound(&result, &input);
+    let mut result = s2.to_readable();
+    check_error_bound(&mut result, &input);
 }
 
 #[test]
@@ -84,8 +84,8 @@ fn it_merges_many_sketches_without_increasing_error() {
         let new_sketch = build_mergable_sketch(&input[start..end]);
         s.merge(&new_sketch);
     }
-    let result = s.to_readable();
-    check_error_bound(&result, &input);
+    let mut result = s.to_readable();
+    check_error_bound(&mut result, &input);
 }
 
 fn sequential_values(n: usize) -> Vec<u64> {
@@ -137,7 +137,7 @@ fn build_writable_sketch(input: &[u64]) -> WritableSketch {
     sketch
 }
 
-fn check_error_bound(sketch: &ReadableSketch, input: &[u64]) {
+fn check_error_bound(sketch: &mut ReadableSketch, input: &[u64]) {
     let calc = ErrorCalculator::new(&input);
     for i in 1..10 {
         let phi = i as f64 / 10.0;

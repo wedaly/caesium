@@ -26,8 +26,8 @@ impl MergableSketch {
         MergableSketch::new(0, Vec::new())
     }
 
-    pub fn to_readable(&self) -> ReadableSketch {
-        ReadableSketch::new(self.count, &self.levels)
+    pub fn to_readable(self) -> ReadableSketch {
+        ReadableSketch::new(self.count, self.levels)
     }
 
     pub fn count(&self) -> usize {

@@ -39,10 +39,10 @@ fn main() -> Result<(), Error> {
     let data = read_data_file(&args.data_path)?;
     let partitions = choose_merge_partitions(data.len(), args.num_merges);
 
-    let sketch = build_sketch(&data, &partitions[..]);
+    let mut sketch = build_sketch(&data, &partitions[..]);
     summarize_size(&sketch);
     let calc = ErrorCalculator::new(&data);
-    summarize_error(&calc, &sketch);
+    summarize_error(&calc, &mut sketch);
 
     Ok(())
 }
@@ -118,7 +118,7 @@ fn summarize_size(sketch: &ReadableSketch) {
     println!("size={}", sketch.size());
 }
 
-fn summarize_error(calc: &ErrorCalculator, sketch: &ReadableSketch) {
+fn summarize_error(calc: &ErrorCalculator, sketch: &mut ReadableSketch) {
     for i in 1..10 {
         let phi = (i as f64) / 10.0;
         let approx = sketch.query(phi).expect("Could not query sketch");

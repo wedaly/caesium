@@ -3,7 +3,7 @@ use rand;
 use std::io::{Read, Write};
 use std::slice::Iter;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Block {
     sorted_values: Vec<u64>,
 }

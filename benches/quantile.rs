@@ -91,22 +91,22 @@ fn bench_insert_many_nonempty(bench: &mut Bencher) {
 }
 
 fn bench_query_small_sketch(bench: &mut Bencher) {
-    let s = build_readable_sketch(256);
+    let mut s = build_readable_sketch(256);
     bench.iter(|| s.query(0.5))
 }
 
 fn bench_query_full_sketch_one_tenth(bench: &mut Bencher) {
-    let s = build_readable_sketch(4096);
+    let mut s = build_readable_sketch(4096);
     bench.iter(|| s.query(0.1))
 }
 
 fn bench_query_full_sketch_median(bench: &mut Bencher) {
-    let s = build_readable_sketch(4096);
+    let mut s = build_readable_sketch(4096);
     bench.iter(|| s.query(0.5))
 }
 
 fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
-    let s = build_readable_sketch(4096);
+    let mut s = build_readable_sketch(4096);
     bench.iter(|| s.query(0.9))
 }
 

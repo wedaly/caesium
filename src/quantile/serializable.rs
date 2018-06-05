@@ -23,7 +23,7 @@ impl SerializableSketch {
     }
 
     pub fn to_readable(self) -> ReadableSketch {
-        ReadableSketch::new(self.count, &self.levels)
+        ReadableSketch::new(self.count, self.levels)
     }
 }
 
