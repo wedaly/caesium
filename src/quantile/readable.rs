@@ -69,7 +69,13 @@ impl ReadableSketch {
 
     pub fn weighted_values_for_level(level: usize, values: &Vec<u64>) -> Vec<WeightedValue> {
         let weight = 1 << level;
-        values.iter().map(|&v| WeightedValue{ weight: weight, value: v }).collect()
+        values
+            .iter()
+            .map(|&v| WeightedValue {
+                weight: weight,
+                value: v,
+            })
+            .collect()
     }
 
     fn calculate_ranked_vals(weighted_vals: &mut Vec<WeightedValue>) -> Vec<(usize, u64)> {
@@ -83,5 +89,4 @@ impl ReadableSketch {
             })
             .collect()
     }
-
 }

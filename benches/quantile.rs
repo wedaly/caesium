@@ -4,7 +4,7 @@ extern crate caesium;
 extern crate rand;
 
 use bencher::Bencher;
-use caesium::encode::encodable::{Decodable, Encodable};
+use caesium::encode::{Decodable, Encodable};
 use caesium::quantile::mergable::MergableSketch;
 use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::serializable::SerializableSketch;

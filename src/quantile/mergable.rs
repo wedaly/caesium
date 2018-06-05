@@ -1,7 +1,7 @@
 use quantile::constants::{CAPACITY_DECAY, MAX_LEVEL_CAPACITY, MIN_LEVEL_CAPACITY};
+use quantile::readable::ReadableSketch;
 use rand;
 use std::cmp::max;
-use quantile::readable::ReadableSketch;
 
 pub struct MergableSketch {
     count: usize, // from original datastream
@@ -27,7 +27,8 @@ impl MergableSketch {
     }
 
     pub fn to_readable(&self) -> ReadableSketch {
-        let weighted_vals = self.sorted_levels.iter()
+        let weighted_vals = self.sorted_levels
+            .iter()
             .enumerate()
             .flat_map(|(level, values)| ReadableSketch::weighted_values_for_level(level, &values))
             .collect();

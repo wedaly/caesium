@@ -1,7 +1,7 @@
-use encode::encodable::{Decodable, Encodable, EncodableError};
-use std::io::{Read, Write};
-use quantile::readable::ReadableSketch;
+use encode::{Decodable, Encodable, EncodableError};
 use quantile::mergable::MergableSketch;
+use quantile::readable::ReadableSketch;
+use std::io::{Read, Write};
 
 #[derive(Debug, PartialEq)]
 pub struct SerializableSketch {
@@ -23,7 +23,8 @@ impl SerializableSketch {
     }
 
     pub fn to_readable(self) -> ReadableSketch {
-        let weighted_vals = self.sorted_levels.iter()
+        let weighted_vals = self.sorted_levels
+            .iter()
             .enumerate()
             .flat_map(|(level, values)| ReadableSketch::weighted_values_for_level(level, &values))
             .collect();
@@ -48,7 +49,7 @@ where
 {
     fn decode(reader: &mut R) -> Result<SerializableSketch, EncodableError> {
         let s = SerializableSketch {
-            count:  usize::decode(reader)?,
+            count: usize::decode(reader)?,
             sorted_levels: Vec::<Vec<u64>>::decode(reader)?,
         };
         Ok(s)
@@ -58,7 +59,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use encode::buffer::Buffer;
 
     #[test]
     fn it_serializes_and_deserializes_empty() {
@@ -75,9 +75,9 @@ mod tests {
     }
 
     fn assert_encode_and_decode(s: &SerializableSketch) {
-        let mut buf = Buffer::new();
+        let mut buf = Vec::new();
         s.encode(&mut buf).expect("Could not encode sketch");
-        let decoded = SerializableSketch::decode(&mut buf).expect("Could not decode sketch");
+        let decoded = SerializableSketch::decode(&mut &buf[..]).expect("Could not decode sketch");
         assert_eq!(*s, decoded);
     }
 }
