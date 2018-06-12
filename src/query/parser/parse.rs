@@ -1,5 +1,5 @@
-use parser::ast::Expression;
-use parser::tokenize::{tokenize, Token, TokenizeError};
+use query::parser::ast::Expression;
+use query::parser::tokenize::{tokenize, Token, TokenizeError};
 
 #[derive(Debug)]
 pub enum ParseError {
