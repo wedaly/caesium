@@ -1,4 +1,3 @@
-use encode::Encodable;
 use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::execute::{execute_query, QueryResult};
@@ -52,8 +51,8 @@ impl<'a> MockDataCursor<'a> {
 }
 
 impl<'a> DataCursor for MockDataCursor<'a> {
-    fn get_next(&mut self) -> Result<Option<&DataRow>, StorageError> {
-        let row_opt = self.data.get(self.idx);
+    fn get_next(&mut self) -> Result<Option<DataRow>, StorageError> {
+        let row_opt = self.data.get(self.idx).cloned();
         self.idx += 1;
         Ok(row_opt)
     }
@@ -64,11 +63,9 @@ fn build_data_row(start: TimeStamp, end: TimeStamp) -> DataRow {
     for i in 0..100 {
         s.insert(i as u64);
     }
-    let mut buffer = Vec::new();
-    s.to_serializable().encode(&mut buffer).unwrap();
     DataRow {
         range: TimeRange { start, end },
-        bytes: buffer.into_boxed_slice(),
+        sketch: s.to_serializable().to_mergable(),
     }
 }
 

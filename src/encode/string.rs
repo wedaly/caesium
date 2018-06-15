@@ -10,7 +10,6 @@ where
     }
 }
 
-
 impl<W> Encodable<W> for String
 where
     W: Write,

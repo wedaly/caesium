@@ -4,8 +4,11 @@ version = "0.1.0"
 authors = ["Will Daly"]
 
 [dependencies]
-rand = "0.4"
 bencher = "0.1.5"
+log = "0.4"
+rand = "0.4"
+rocksdb = "0.10.0"
+uuid = { version = "0.6", features = ["v4"] }
 
 [[bench]]
 name = "quantile"

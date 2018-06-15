@@ -1,8 +1,10 @@
 use quantile::block::Block;
 use quantile::constants::{CAPACITY_DECAY, MAX_LEVEL_CAPACITY, MIN_LEVEL_CAPACITY};
 use quantile::readable::ReadableSketch;
+use quantile::serializable::SerializableSketch;
 use std::cmp::max;
 
+#[derive(Clone)]
 pub struct MergableSketch {
     count: usize, // from original datastream
     size: usize,  // count of stored values
@@ -28,6 +30,10 @@ impl MergableSketch {
 
     pub fn to_readable(self) -> ReadableSketch {
         ReadableSketch::new(self.count, self.levels)
+    }
+
+    pub fn to_serializable(self) -> SerializableSketch {
+        SerializableSketch::new(self.count, self.levels)
     }
 
     pub fn count(&self) -> usize {

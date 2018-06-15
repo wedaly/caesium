@@ -1,9 +1,6 @@
-use encode::Decodable;
-use quantile::mergable::MergableSketch;
-use quantile::serializable::SerializableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
-use storage::datasource::{DataCursor, DataRow, DataSource};
+use storage::datasource::{DataCursor, DataSource};
 
 pub struct FetchOp<'a> {
     cursor: Box<DataCursor + 'a>,
@@ -14,16 +11,6 @@ impl<'a> FetchOp<'a> {
         let cursor = source.fetch_range(&metric, None, None)?;
         Ok(FetchOp { cursor })
     }
-
-    pub fn deserialize_row(row: &DataRow) -> Result<OpOutput, QueryError> {
-        let sketch = FetchOp::deserialize_row_value(&row.bytes)?;
-        Ok(OpOutput::Sketch(row.range, sketch))
-    }
-
-    fn deserialize_row_value(mut bytes: &[u8]) -> Result<MergableSketch, QueryError> {
-        let sketch = SerializableSketch::decode(&mut bytes)?;
-        Ok(sketch.to_mergable())
-    }
 }
 
 impl<'a> QueryOp for FetchOp<'a> {
@@ -31,7 +18,7 @@ impl<'a> QueryOp for FetchOp<'a> {
         let next = self.cursor.get_next()?;
         match next {
             None => Ok(OpOutput::End),
-            Some(row) => FetchOp::deserialize_row(&row),
+            Some(row) => Ok(OpOutput::Sketch(row.range, row.sketch)),
         }
     }
 }
