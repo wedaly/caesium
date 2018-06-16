@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 macro_rules! build_encodable_int_type {
     ($type:ty) => {
-        impl<W> Encodable<$type, W> for $type
+        impl<W> Encodable<W> for $type
         where
             W: Write,
         {

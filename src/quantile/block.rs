@@ -88,7 +88,7 @@ impl Block {
     }
 }
 
-impl<W> Encodable<Block, W> for Block
+impl<W> Encodable<W> for Block
 where
     W: Write,
 {

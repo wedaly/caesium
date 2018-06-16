@@ -27,7 +27,7 @@ impl SerializableSketch {
     }
 }
 
-impl<W> Encodable<SerializableSketch, W> for SerializableSketch
+impl<W> Encodable<W> for SerializableSketch
 where
     W: Write,
 {

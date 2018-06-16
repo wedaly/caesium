@@ -26,7 +26,7 @@ impl From<FromUtf8Error> for EncodableError {
     }
 }
 
-pub trait Encodable<T, W>
+pub trait Encodable<W>
 where
     W: Write,
 {

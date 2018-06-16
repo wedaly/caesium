@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 
 macro_rules! build_encodable_vec_type {
     ($type:ty) => {
-        impl<W> Encodable<Vec<$type>, W> for Vec<$type>
+        impl<W> Encodable<W> for Vec<$type>
         where
             W: Write,
         {
