@@ -12,6 +12,7 @@ use std::string::FromUtf8Error;
 pub enum EncodableError {
     IOError(IOError),
     FromUtf8Error(FromUtf8Error),
+    FormatError(&'static str),
 }
 
 impl From<IOError> for EncodableError {

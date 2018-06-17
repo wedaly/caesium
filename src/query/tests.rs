@@ -1,6 +1,7 @@
 use quantile::writable::WritableSketch;
 use query::error::QueryError;
-use query::execute::{execute_query, QueryResult};
+use query::execute::execute_query;
+use query::result::QueryResult;
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;

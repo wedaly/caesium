@@ -1,14 +1,8 @@
 use query::build::build_query;
 use query::error::QueryError;
 use query::ops::OpOutput;
+use query::result::QueryResult;
 use storage::datasource::DataSource;
-use time::TimeRange;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct QueryResult {
-    pub range: TimeRange,
-    pub value: u64,
-}
 
 pub fn execute_query<'a>(
     query: &str,

@@ -2,10 +2,12 @@
 extern crate log;
 extern crate rand;
 extern crate rocksdb;
+extern crate tokio;
 extern crate uuid;
 
 #[macro_use]
 pub mod encode;
+pub mod network;
 pub mod quantile;
 pub mod query;
 pub mod storage;
