@@ -3,8 +3,8 @@ extern crate env_logger;
 
 use caesium::network::error::NetworkError;
 use caesium::network::server::run_server;
-use caesium::storage::store::MetricStore;
 use caesium::storage::error::StorageError;
+use caesium::storage::store::MetricStore;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 fn main() -> Result<(), ServerError> {
@@ -18,7 +18,7 @@ fn main() -> Result<(), ServerError> {
 #[derive(Debug)]
 enum ServerError {
     NetworkError(NetworkError),
-    StorageError(StorageError)
+    StorageError(StorageError),
 }
 
 impl From<NetworkError> for ServerError {

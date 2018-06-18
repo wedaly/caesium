@@ -4,13 +4,13 @@ use network::message::Message;
 use quantile::serializable::SerializableSketch;
 use query::execute::execute_query;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use storage::store::MetricStore;
 use time::TimeStamp;
 use tokio;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use storage::store::MetricStore;
-use std::sync::Arc;
 
 pub fn run_server(addr: &SocketAddr, db: MetricStore) -> Result<(), NetworkError> {
     let listener = TcpListener::bind(addr)?;
@@ -78,16 +78,21 @@ fn process_request(req: Message, db: &MetricStore) -> Message {
     }
 }
 
-fn process_insert(metric: &str, ts: TimeStamp, sketch: SerializableSketch, db:&MetricStore) -> Message {
+fn process_insert(
+    metric: &str,
+    ts: TimeStamp,
+    sketch: SerializableSketch,
+    db: &MetricStore,
+) -> Message {
     match db.insert(metric, ts, sketch) {
         Ok(_) => Message::InsertSuccessResp,
-        Err(err) => Message::ErrorResp(format!("{:?}", err))
+        Err(err) => Message::ErrorResp(format!("{:?}", err)),
     }
 }
 
 fn process_query(q: &str, db: &MetricStore) -> Message {
     match execute_query(q, db) {
         Ok(results) => Message::QuerySuccessResp(results),
-        Err(err) => Message::ErrorResp(format!("{:?}", err))
+        Err(err) => Message::ErrorResp(format!("{:?}", err)),
     }
 }

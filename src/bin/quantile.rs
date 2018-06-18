@@ -7,24 +7,26 @@ use caesium::quantile::writable::WritableSketch;
 use rand::Rng;
 use std::env;
 use std::fs::File;
-use std::io::Error as IOError;
+use std::io;
 use std::io::{BufRead, BufReader};
+use std::num::ParseIntError;
 
 #[derive(Debug)]
 enum Error {
-    ArgParseError(String),
-    IOError(IOError),
+    ArgParseError(&'static str),
+    IOError(io::Error),
+    ParseIntError(ParseIntError),
 }
 
-impl Error {
-    fn arg_err(msg: &str) -> Error {
-        Error::ArgParseError(String::from(msg))
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IOError(err)
     }
 }
 
-impl From<IOError> for Error {
-    fn from(err: IOError) -> Error {
-        Error::IOError(err)
+impl From<ParseIntError> for Error {
+    fn from(err: ParseIntError) -> Error {
+        Error::ParseIntError(err)
     }
 }
 
@@ -48,13 +50,13 @@ fn main() -> Result<(), Error> {
 }
 
 fn parse_args() -> Result<Args, Error> {
-    let data_path = env::args()
-        .nth(1)
-        .ok_or(Error::arg_err("Missing required argument `data_path`"))?;
+    let data_path = env::args().nth(1).ok_or(Error::ArgParseError(
+        "Missing required argument `data_path`",
+    ))?;
     let num_merges = env::args()
         .nth(2)
         .map_or(Ok(0), |s| s.parse::<usize>())
-        .map_err(|_| Error::arg_err("Could not parse integer for arg `num_merges`"))?;
+        .map_err(|_| Error::ArgParseError("Could not parse integer for arg `num_merges`"))?;
     Ok(Args {
         data_path: data_path,
         num_merges: num_merges,
@@ -66,21 +68,14 @@ fn read_data_file(path: &str) -> Result<Vec<u64>, Error> {
     let reader = BufReader::new(file);
     let values = reader
         .lines()
-        .filter_map(|line| parse_val_from_line(line))
+        .filter_map(|result| {
+            result
+                .map_err(|e| Error::IOError(e))
+                .and_then(|l| l.parse::<u64>().map_err(From::from))
+                .ok()
+        })
         .collect();
     Ok(values)
-}
-
-fn parse_val_from_line(line: Result<String, IOError>) -> Option<u64> {
-    if let Ok(l) = line {
-        if let Ok(v) = l.parse::<u64>() {
-            Some(v)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
 }
 
 fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
