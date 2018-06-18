@@ -34,6 +34,7 @@ impl MetricStore {
     ) -> Result<(), StorageError> {
         let key = MetricStore::key(metric, ts)?;
         let val = MetricStore::val(sketch)?;
+        debug!("Inserted key for metric {} and ts {}", metric, ts);
         self.raw_db.merge(&key, &val)?;
         Ok(())
     }
@@ -98,19 +99,20 @@ impl DataSource for MetricStore {
         let end_ts = end.unwrap_or(u64::max_value());
         let prefix = MetricStore::key(metric, ts)?;
         let raw_iter = self.raw_db.prefix_iterator(&prefix);
-        let cursor = MetricCursor::new(raw_iter, end_ts);
+        let cursor = MetricCursor::new(raw_iter, metric.to_string(), end_ts);
         Ok(Box::new(cursor))
     }
 }
 
 pub struct MetricCursor {
     raw_iter: rocksdb::DBIterator,
+    metric: String,
     end: TimeStamp,
 }
 
 impl MetricCursor {
-    fn new(raw_iter: rocksdb::DBIterator, end: TimeStamp) -> MetricCursor {
-        MetricCursor { raw_iter, end }
+    fn new(raw_iter: rocksdb::DBIterator, metric: String, end: TimeStamp) -> MetricCursor {
+        MetricCursor { raw_iter, metric, end }
     }
 }
 
@@ -120,12 +122,13 @@ impl DataCursor for MetricCursor {
             None => None,
             Some((key, val)) => {
                 let mut key_buf = Cursor::new(key);
-                let _ = String::decode(&mut key_buf)?;
+                let metric = String::decode(&mut key_buf)?;
                 let bucket: TimeBucket = u64::decode(&mut key_buf)?;
                 let range = bucket_to_range(bucket);
-                if range.end > self.end {
+                if metric != self.metric || range.end > self.end {
                     None
                 } else {
+                    debug!("Fetching key for metric {} and ts {}", metric, range.start);
                     let mut val_bytes: &[u8] = &val;
                     let sketch = SerializableSketch::decode(&mut val_bytes)?.to_mergable();
                     Some(DataRow { range, sketch })
@@ -188,6 +191,25 @@ mod tests {
                 .expect("Could not fetch range");
             let first_row = cursor.get_next().expect("Could not get first row");
             assert_row(first_row, 0, 30_000, 50);
+            let next_row = cursor.get_next().expect("Could not get next row");
+            assert!(next_row.is_none());
+        })
+    }
+
+    #[test]
+    fn it_fetches_by_metric_sequential_name_same_timestamp() {
+        with_test_store(|store| {
+            let (m1, m2) = ("m1", "m2");
+            store
+                .insert(&m1, 30000, build_sketch())
+                .expect("Could not insert first sketch");
+            store
+                .insert(&m2, 30000, build_sketch())
+                .expect("Could not insert second sketch");
+            let mut cursor = store
+                .fetch_range(&m1, None, None)
+                .expect("Could not fetch range");
+            let _ = cursor.get_next().expect("Could not get first row");
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })

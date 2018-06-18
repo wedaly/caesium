@@ -13,32 +13,6 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::num::ParseIntError;
 
 #[derive(Debug)]
-enum Error {
-    ArgParseError(&'static str),
-    IOError(io::Error),
-    ParseIntError(ParseIntError),
-    NetworkError(NetworkError),
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::IOError(err)
-    }
-}
-
-impl From<ParseIntError> for Error {
-    fn from(err: ParseIntError) -> Error {
-        Error::ParseIntError(err)
-    }
-}
-
-impl From<NetworkError> for Error {
-    fn from(err: NetworkError) -> Error {
-        Error::NetworkError(err)
-    }
-}
-
-#[derive(Debug)]
 struct Args {
     metric: String,
     ts: TimeStamp,
@@ -84,4 +58,30 @@ fn build_sketch(path: &str) -> Result<SerializableSketch, Error> {
         })
         .for_each(|val| sketch.insert(val));
     Ok(sketch.to_serializable())
+}
+
+#[derive(Debug)]
+enum Error {
+    ArgParseError(&'static str),
+    IOError(io::Error),
+    ParseIntError(ParseIntError),
+    NetworkError(NetworkError),
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IOError(err)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(err: ParseIntError) -> Error {
+        Error::ParseIntError(err)
+    }
+}
+
+impl From<NetworkError> for Error {
+    fn from(err: NetworkError) -> Error {
+        Error::NetworkError(err)
+    }
 }

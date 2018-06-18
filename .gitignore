@@ -3,3 +3,4 @@ perf.data
 perf.data.old
 datasets/*.txt
 db
+tests/out
