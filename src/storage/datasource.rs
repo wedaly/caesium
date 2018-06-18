@@ -14,7 +14,7 @@ pub trait DataCursor {
 
 pub trait DataSource {
     fn fetch_range<'a>(
-        &'a mut self,
+        &'a self,
         metric: &str,
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,

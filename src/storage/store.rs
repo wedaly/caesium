@@ -27,7 +27,7 @@ impl MetricStore {
     }
 
     pub fn insert(
-        &mut self,
+        &self,
         metric: &str,
         ts: TimeStamp,
         sketch: SerializableSketch,
@@ -89,7 +89,7 @@ impl MetricStore {
 
 impl DataSource for MetricStore {
     fn fetch_range<'a>(
-        &'a mut self,
+        &'a self,
         metric: &str,
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn it_fetches_no_result() {
-        with_test_store(|mut store| {
+        with_test_store(|store| {
             let mut cursor = store
                 .fetch_range(&"ghost", None, None)
                 .expect("Could not fetch range");
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn it_stores_and_fetches_sketch() {
-        with_test_store(|mut store| {
+        with_test_store(|store| {
             let metric = "foo";
             store
                 .insert(&metric, 0, build_sketch())
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn it_fetches_by_metric() {
-        with_test_store(|mut store| {
+        with_test_store(|store| {
             let metric = "foo";
             store
                 .insert(&metric, 0, build_sketch())
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn it_fetches_by_time_range() {
-        with_test_store(|mut store| {
+        with_test_store(|store| {
             let metric = "foo";
             store
                 .insert(&metric, 0, build_sketch())
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn it_merges_sketches_in_same_time_bucket() {
-        with_test_store(|mut store| {
+        with_test_store(|store| {
             let metric = "foo";
             store
                 .insert(&metric, 0, build_sketch_with_values(vec![1, 2]))

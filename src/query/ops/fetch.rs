@@ -7,7 +7,7 @@ pub struct FetchOp<'a> {
 }
 
 impl<'a> FetchOp<'a> {
-    pub fn new(metric: String, source: &'a mut DataSource) -> Result<FetchOp<'a>, QueryError> {
+    pub fn new(metric: String, source: &'a DataSource) -> Result<FetchOp<'a>, QueryError> {
         let cursor = source.fetch_range(&metric, None, None)?;
         Ok(FetchOp { cursor })
     }

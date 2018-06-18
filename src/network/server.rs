@@ -2,24 +2,28 @@ use encode::{Decodable, Encodable};
 use network::error::NetworkError;
 use network::message::Message;
 use quantile::serializable::SerializableSketch;
-use query::result::QueryResult;
+use query::execute::execute_query;
 use std::net::SocketAddr;
 use time::TimeStamp;
 use tokio;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
+use storage::store::MetricStore;
+use std::sync::Arc;
 
-pub fn run_server(addr: &SocketAddr) -> Result<(), NetworkError> {
+pub fn run_server(addr: &SocketAddr, db: MetricStore) -> Result<(), NetworkError> {
     let listener = TcpListener::bind(addr)?;
     info!("Server is running on {}", addr);
 
+    let db = Arc::new(db);
     let server = listener
         .incoming()
-        .for_each(|socket| {
+        .for_each(move |socket| {
             if let Ok(addr) = socket.peer_addr() {
                 debug!("New connection from {}", addr);
-                handle_connection(socket);
+                let db_ref = db.clone();
+                handle_connection(socket, db_ref);
             }
             Ok(())
         })
@@ -30,19 +34,20 @@ pub fn run_server(addr: &SocketAddr) -> Result<(), NetworkError> {
     Ok(())
 }
 
-fn handle_connection(socket: TcpStream) {
+fn handle_connection(socket: TcpStream, db: Arc<MetricStore>) {
     let input_buf = Vec::new();
     let mut output_buf = Vec::new();
     let handle_conn = io::read_to_end(socket, input_buf)
         .and_then(move |(socket, buf)| {
-            process(&buf, &mut output_buf);
+            let db_ref = db.clone();
+            process(&buf, &mut output_buf, db_ref);
             io::write_all(socket, output_buf)
         })
         .then(|_| Ok(()));
     tokio::spawn(handle_conn);
 }
 
-fn process(mut input: &[u8], output: &mut Vec<u8>) {
+fn process(mut input: &[u8], output: &mut Vec<u8>, db: Arc<MetricStore>) {
     let req = match Message::decode(&mut input) {
         Ok(msg) => {
             debug!("Received msg: {:?}", msg);
@@ -54,7 +59,7 @@ fn process(mut input: &[u8], output: &mut Vec<u8>) {
         }
     };
 
-    let resp = process_request(req);
+    let resp = process_request(req, &*db);
     match resp.encode(output) {
         Ok(_) => {
             debug!("Sent msg: {:?}", resp);
@@ -65,20 +70,24 @@ fn process(mut input: &[u8], output: &mut Vec<u8>) {
     };
 }
 
-fn process_request(req: Message) -> Message {
+fn process_request(req: Message, db: &MetricStore) -> Message {
     match req {
-        Message::InsertReq { metric, ts, sketch } => process_insert(&metric, ts, sketch),
-        Message::QueryReq(q) => process_query(&q),
+        Message::InsertReq { metric, ts, sketch } => process_insert(&metric, ts, sketch, db),
+        Message::QueryReq(q) => process_query(&q, db),
         _ => Message::ErrorResp("Invalid message type".to_string()),
     }
 }
 
-fn process_insert(metric: &str, ts: TimeStamp, sketch: SerializableSketch) -> Message {
-    // TODO: insert into database... how to get DB handle?
-    Message::InsertSuccessResp
+fn process_insert(metric: &str, ts: TimeStamp, sketch: SerializableSketch, db:&MetricStore) -> Message {
+    match db.insert(metric, ts, sketch) {
+        Ok(_) => Message::InsertSuccessResp,
+        Err(err) => Message::ErrorResp(format!("{:?}", err))
+    }
 }
 
-fn process_query(q: &str) -> Message {
-    // TODO: query database... how to get DB handle?
-    Message::QuerySuccessResp(vec![])
+fn process_query(q: &str, db: &MetricStore) -> Message {
+    match execute_query(q, db) {
+        Ok(results) => Message::QuerySuccessResp(results),
+        Err(err) => Message::ErrorResp(format!("{:?}", err))
+    }
 }

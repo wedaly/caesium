@@ -8,7 +8,7 @@ use storage::datasource::DataSource;
 
 pub fn build_query<'a>(
     query: &str,
-    source: &'a mut DataSource,
+    source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     let expr = parse(query)?;
     match { *expr } {
@@ -20,7 +20,7 @@ pub fn build_query<'a>(
 fn map_func_to_query_op<'a>(
     name: &str,
     args: &[Box<Expression>],
-    source: &'a mut DataSource,
+    source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     match name {
         "fetch" => build_fetch_op(args, source),
@@ -31,7 +31,7 @@ fn map_func_to_query_op<'a>(
 
 fn build_fetch_op<'a>(
     args: &[Box<Expression>],
-    source: &'a mut DataSource,
+    source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     let metric = get_string_arg(args, 0)?;
     let op = FetchOp::new(metric, source)?;
@@ -40,7 +40,7 @@ fn build_fetch_op<'a>(
 
 fn build_quantile_op<'a>(
     args: &[Box<Expression>],
-    source: &'a mut DataSource,
+    source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     let phi = get_float_arg(args, 0)?;
     let input = get_func_arg(args, 1, source)?;
@@ -71,7 +71,7 @@ fn get_float_arg(args: &[Box<Expression>], idx: usize) -> Result<f64, QueryError
 fn get_func_arg<'a>(
     args: &[Box<Expression>],
     idx: usize,
-    source: &'a mut DataSource,
+    source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     match args.get(idx) {
         Some(expr) => match **expr {

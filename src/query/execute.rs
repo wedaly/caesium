@@ -6,7 +6,7 @@ use storage::datasource::DataSource;
 
 pub fn execute_query<'a>(
     query: &str,
-    source: &mut DataSource,
+    source: &DataSource,
 ) -> Result<Vec<QueryResult>, QueryError> {
     let mut pipeline = build_query(query, source)?;
     let mut results = Vec::<QueryResult>::new();
