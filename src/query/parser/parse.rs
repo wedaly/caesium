@@ -28,6 +28,7 @@ type ParseResult<T> = Result<(usize, T), ParseError>;
 
 fn parse_expr(tokens: &[Token]) -> ParseResult<Box<Expression>> {
     match tokens.first() {
+        Some(Token::Int(i)) => Ok((1, Box::new(Expression::IntLiteral(*i)))),
         Some(Token::Float(f)) => Ok((1, Box::new(Expression::FloatLiteral(*f)))),
         Some(Token::Symbol(s)) => match tokens.get(1) {
             Some(Token::LeftParen) => parse_function_call(tokens),
@@ -88,6 +89,15 @@ mod tests {
         let ast = parse(&"foo").expect("Could not parse input string");
         match *ast {
             Expression::StringLiteral(s) => assert_eq!(s, "foo"),
+            _ => panic!("Unexpected node type"),
+        }
+    }
+
+    #[test]
+    fn it_parses_int_literal() {
+        let ast = parse(&"23").expect("Could not parse input string");
+        match *ast {
+            Expression::IntLiteral(i) => assert_eq!(i, 23),
             _ => panic!("Unexpected node type"),
         }
     }

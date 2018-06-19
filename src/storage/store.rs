@@ -77,7 +77,7 @@ impl MetricStore {
     fn key(metric: &str, ts: TimeStamp) -> Result<Vec<u8>, StorageError> {
         let mut buf = Vec::new();
         metric.encode(&mut buf)?;
-        ts_to_bucket(ts).encode(&mut buf)?;
+        ts_to_bucket(ts, 1).encode(&mut buf)?;
         Ok(buf)
     }
 
@@ -124,7 +124,7 @@ impl DataCursor for MetricCursor {
                 let mut key_buf = Cursor::new(key);
                 let metric = String::decode(&mut key_buf)?;
                 let bucket: TimeBucket = u64::decode(&mut key_buf)?;
-                let range = bucket_to_range(bucket);
+                let range = bucket_to_range(bucket, 1);
                 if metric != self.metric || range.end > self.end {
                     None
                 } else {

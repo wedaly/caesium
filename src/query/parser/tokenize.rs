@@ -1,8 +1,9 @@
-use std::num::ParseFloatError;
+use std::num::{ParseIntError, ParseFloatError};
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
     Symbol(String),
+    Int(u64),
     Float(f64),
     LeftParen,
     RightParen,
@@ -12,7 +13,14 @@ pub enum Token {
 #[derive(Debug)]
 pub enum TokenizeError {
     UnexpectedChar(char),
+    ParseIntError(ParseIntError),
     ParseFloatError(ParseFloatError),
+}
+
+impl From<ParseIntError> for TokenizeError {
+    fn from(err: ParseIntError) -> TokenizeError {
+        TokenizeError::ParseIntError(err)
+    }
 }
 
 impl From<ParseFloatError> for TokenizeError {
@@ -39,7 +47,7 @@ pub fn tokenize(s: &str) -> Result<Vec<Token>, TokenizeError> {
         } else if next_char == ')' {
             i += tokenize_right_paren(&mut tokens);
         } else if next_char.is_ascii_digit() {
-            i += tokenize_float(slice, &mut tokens)?;
+            i += tokenize_numeric(slice, &mut tokens)?;
         } else if next_char.is_ascii_alphabetic() {
             i += tokenize_symbol(slice, &mut tokens)?;
         } else {
@@ -64,7 +72,7 @@ fn tokenize_right_paren(tokens: &mut Vec<Token>) -> usize {
     1
 }
 
-fn tokenize_float(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
+fn tokenize_numeric(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
     let mut i = 0;
     let mut found_decimal = false;
     for c in s.chars() {
@@ -80,8 +88,13 @@ fn tokenize_float(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeErr
         }
     }
     debug_assert!(i > 0);
-    let value: f64 = s[..i].parse()?;
-    tokens.push(Token::Float(value));
+    if found_decimal {
+        let value: f64 = s[..i].parse()?;
+        tokens.push(Token::Float(value));
+    } else {
+        let value: u64 = s[..i].parse()?;
+        tokens.push(Token::Int(value));
+    }
     Ok(i)
 }
 

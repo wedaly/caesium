@@ -12,5 +12,6 @@ pub trait QueryOp {
     fn get_next(&mut self) -> Result<OpOutput, QueryError>;
 }
 
+pub mod bucket;
 pub mod fetch;
 pub mod quantile;

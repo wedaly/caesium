@@ -5,7 +5,7 @@ use query::result::QueryResult;
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{TimeRange, TimeStamp};
+use time::{TimeStamp, TimeBucket, bucket_to_range, TIME_BUCKET_MS};
 
 struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
@@ -59,13 +59,13 @@ impl<'a> DataCursor for MockDataCursor<'a> {
     }
 }
 
-fn build_data_row(start: TimeStamp, end: TimeStamp) -> DataRow {
+fn build_data_row(bucket: TimeBucket) -> DataRow {
     let mut s = WritableSketch::new();
     for i in 0..100 {
         s.insert(i as u64);
     }
     DataRow {
-        range: TimeRange { start, end },
+        range: bucket_to_range(bucket, 1),
         sketch: s.to_serializable().to_mergable(),
     }
 }
@@ -73,9 +73,9 @@ fn build_data_row(start: TimeStamp, end: TimeStamp) -> DataRow {
 #[test]
 fn it_queries_quantile_by_metric() {
     let mut source = MockDataSource::new();
-    source.add_row("foo", build_data_row(0, 30));
-    source.add_row("foo", build_data_row(30, 60));
-    source.add_row("bar", build_data_row(60, 90));
+    source.add_row("foo", build_data_row(1));
+    source.add_row("foo", build_data_row(2));
+    source.add_row("bar", build_data_row(3));
     let query = "quantile(0.5, fetch(foo))";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_eq!(results.len(), 2);
@@ -84,7 +84,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r1,
         QueryResult {
-            range: TimeRange { start: 0, end: 30 },
+            range: bucket_to_range(1, 1),
             value: 50
         }
     );
@@ -93,7 +93,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r2,
         QueryResult {
-            range: TimeRange { start: 30, end: 60 },
+            range: bucket_to_range(2, 1),
             value: 50
         }
     );
@@ -102,10 +102,65 @@ fn it_queries_quantile_by_metric() {
 #[test]
 fn it_queries_quantile_metric_not_found() {
     let mut source = MockDataSource::new();
-    source.add_row("foo", build_data_row(0, 30));
+    source.add_row("foo", build_data_row(1));
     let query = "quantile(0.5, fetch(bar))";
     match execute_query(&query, &mut source) {
         Err(QueryError::StorageError(StorageError::NotFound)) => {}
         _ => panic!("Expected not found error!"),
+    }
+}
+
+
+#[test]
+fn it_queries_quantile_bucket_by_hour() {
+    let mut source = MockDataSource::new();
+    let hours = 2;
+    let buckets_per_hour = 3_600_000 / TIME_BUCKET_MS;
+    let num_buckets = hours * buckets_per_hour;
+    for i in 0..num_buckets {
+        source.add_row("foo", build_data_row(i))
+    }
+    let query = "quantile(0.5, bucket(1, fetch(foo)))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), hours as usize);
+    for row in results.iter() {
+        let interval = row.range.end - row.range.start;
+        assert_eq!(interval, 3_600_000);
+    }
+}
+
+#[test]
+fn it_queries_quantile_bucket_by_day() {
+    let mut source = MockDataSource::new();
+    let days = 2;
+    let buckets_per_day = 86_400_000 / TIME_BUCKET_MS;
+    let num_buckets = days * buckets_per_day;
+    for i in 0..num_buckets {
+        source.add_row("foo", build_data_row(i))
+    }
+    let query = "quantile(0.5, bucket(24, fetch(foo)))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), days as usize);
+    for row in results.iter() {
+        let interval = row.range.end - row.range.start;
+        assert_eq!(interval, 86_400_000);
+    }
+}
+
+#[test]
+fn it_errors_if_bucket_applied_twice() {
+    let mut source = MockDataSource::new();
+    let hours = 2;
+    let buckets_per_hour = 3_600_000 / TIME_BUCKET_MS;
+    let num_buckets = hours * buckets_per_hour;
+    for i in 0..num_buckets {
+        source.add_row("foo", build_data_row(i))
+    }
+    let query = "quantile(0.5, bucket(1, bucket(5, fetch(foo))))";
+    match execute_query(&query, &mut source) {
+        Err(QueryError::InvalidWindowSize(s)) => {
+            assert_eq!(s, 18_000_000);
+        },
+        _ => panic!("Expected invalid window size error!"),
     }
 }

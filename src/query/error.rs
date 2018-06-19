@@ -11,6 +11,7 @@ pub enum QueryError {
     MissingArg,
     InvalidArgType,
     PhiOutOfRange(f64),
+    InvalidWindowSize(u64),
     EncodableError(EncodableError),
     ParseError(ParseError),
     StorageError(StorageError),

@@ -1,6 +1,7 @@
 use query::error::QueryError;
 use query::ops::fetch::FetchOp;
 use query::ops::quantile::QuantileOp;
+use query::ops::bucket::BucketOp;
 use query::ops::QueryOp;
 use query::parser::ast::Expression;
 use query::parser::parse::parse;
@@ -25,6 +26,7 @@ fn map_func_to_query_op<'a>(
     match name {
         "fetch" => build_fetch_op(args, source),
         "quantile" => build_quantile_op(args, source),
+        "bucket" => build_window_op(args, source),
         f => Err(QueryError::UnrecognizedFunction(f.to_string())),
     }
 }
@@ -48,10 +50,30 @@ fn build_quantile_op<'a>(
     Ok(Box::new(op))
 }
 
+fn build_window_op<'a>(
+    args: &[Box<Expression>],
+    source: &'a DataSource,
+) -> Result<Box<QueryOp + 'a>, QueryError> {
+    let hours = get_int_arg(args, 0)?;
+    let input = get_func_arg(args, 1, source)?;
+    let op = BucketOp::new(hours, input);
+    Ok(Box::new(op))
+}
+
 fn get_string_arg(args: &[Box<Expression>], idx: usize) -> Result<String, QueryError> {
     match args.get(idx) {
         Some(expr) => match **expr {
             Expression::StringLiteral(ref s) => Ok(s.to_string()),
+            _ => Err(QueryError::InvalidArgType),
+        },
+        None => Err(QueryError::MissingArg),
+    }
+}
+
+fn get_int_arg(args: &[Box<Expression>], idx: usize) -> Result<u64, QueryError> {
+    match args.get(idx) {
+        Some(expr) => match **expr {
+            Expression::IntLiteral(i) => Ok(i),
             _ => Err(QueryError::InvalidArgType),
         },
         None => Err(QueryError::MissingArg),
