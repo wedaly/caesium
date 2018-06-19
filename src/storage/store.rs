@@ -29,12 +29,12 @@ impl MetricStore {
     pub fn insert(
         &self,
         metric: &str,
-        ts: TimeStamp,
+        bucket: TimeBucket,
         sketch: SerializableSketch,
     ) -> Result<(), StorageError> {
-        let key = MetricStore::key(metric, ts)?;
+        let key = MetricStore::key(metric, bucket)?;
         let val = MetricStore::val(sketch)?;
-        debug!("Inserted key for metric {} and ts {}", metric, ts);
+        debug!("Inserted key for metric {} and bucket {}", metric, bucket);
         self.raw_db.merge(&key, &val)?;
         Ok(())
     }
@@ -74,10 +74,10 @@ impl MetricStore {
         }
     }
 
-    fn key(metric: &str, ts: TimeStamp) -> Result<Vec<u8>, StorageError> {
+    fn key(metric: &str, bucket: TimeBucket) -> Result<Vec<u8>, StorageError> {
         let mut buf = Vec::new();
         metric.encode(&mut buf)?;
-        ts_to_bucket(ts, 1).encode(&mut buf)?;
+        bucket.encode(&mut buf)?;
         Ok(buf)
     }
 
@@ -97,9 +97,9 @@ impl DataSource for MetricStore {
     ) -> Result<Box<DataCursor + 'a>, StorageError> {
         let ts = start.unwrap_or(0);
         let end_ts = end.unwrap_or(u64::max_value());
-        let prefix = MetricStore::key(metric, ts)?;
+        let prefix = MetricStore::key(metric, ts_to_bucket(ts, 1))?;
         let raw_iter = self.raw_db.prefix_iterator(&prefix);
-        let cursor = MetricCursor::new(raw_iter, metric.to_string(), end_ts);
+        let cursor = MetricCursor::new(raw_iter, metric.to_string(), ts_to_bucket(end_ts, 1));
         Ok(Box::new(cursor))
     }
 }
@@ -107,12 +107,16 @@ impl DataSource for MetricStore {
 pub struct MetricCursor {
     raw_iter: rocksdb::DBIterator,
     metric: String,
-    end: TimeStamp,
+    end: TimeBucket,
 }
 
 impl MetricCursor {
-    fn new(raw_iter: rocksdb::DBIterator, metric: String, end: TimeStamp) -> MetricCursor {
-        MetricCursor { raw_iter, metric, end }
+    fn new(raw_iter: rocksdb::DBIterator, metric: String, end: TimeBucket) -> MetricCursor {
+        MetricCursor {
+            raw_iter,
+            metric,
+            end,
+        }
     }
 }
 
@@ -124,12 +128,12 @@ impl DataCursor for MetricCursor {
                 let mut key_buf = Cursor::new(key);
                 let metric = String::decode(&mut key_buf)?;
                 let bucket: TimeBucket = u64::decode(&mut key_buf)?;
-                let range = bucket_to_range(bucket, 1);
-                if metric != self.metric || range.end > self.end {
+                if metric != self.metric || bucket > self.end {
                     None
                 } else {
-                    debug!("Fetching key for metric {} and ts {}", metric, range.start);
+                    debug!("Fetching key for metric {} and bucket {}", metric, bucket);
                     let mut val_bytes: &[u8] = &val;
+                    let range = bucket_to_range(bucket, 1);
                     let sketch = SerializableSketch::decode(&mut val_bytes)?.to_mergable();
                     Some(DataRow { range, sketch })
                 }
@@ -223,13 +227,13 @@ mod tests {
                 .insert(&metric, 0, build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&metric, 90_000, build_sketch())
+                .insert(&metric, 3, build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&metric, 120_000, build_sketch())
+                .insert(&metric, 4, build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&metric, 180_000, build_sketch())
+                .insert(&metric, 6, build_sketch())
                 .expect("Could not insert sketch");
             let mut cursor = store
                 .fetch_range(&metric, Some(85_000), Some(150_000))

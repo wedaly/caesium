@@ -5,7 +5,7 @@ use query::result::QueryResult;
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{TimeStamp, TimeBucket, bucket_to_range, TIME_BUCKET_MS};
+use time::{bucket_to_range, TimeBucket, TimeStamp, TIME_BUCKET_MS};
 
 struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
@@ -110,7 +110,6 @@ fn it_queries_quantile_metric_not_found() {
     }
 }
 
-
 #[test]
 fn it_queries_quantile_bucket_by_hour() {
     let mut source = MockDataSource::new();
@@ -160,7 +159,7 @@ fn it_errors_if_bucket_applied_twice() {
     match execute_query(&query, &mut source) {
         Err(QueryError::InvalidWindowSize(s)) => {
             assert_eq!(s, 18_000_000);
-        },
+        }
         _ => panic!("Expected invalid window size error!"),
     }
 }

@@ -1,7 +1,7 @@
 use query::error::QueryError;
+use query::ops::bucket::BucketOp;
 use query::ops::fetch::FetchOp;
 use query::ops::quantile::QuantileOp;
-use query::ops::bucket::BucketOp;
 use query::ops::QueryOp;
 use query::parser::ast::Expression;
 use query::parser::parse::parse;

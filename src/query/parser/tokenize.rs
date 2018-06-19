@@ -1,4 +1,4 @@
-use std::num::{ParseIntError, ParseFloatError};
+use std::num::{ParseFloatError, ParseIntError};
 
 #[derive(Debug, PartialEq)]
 pub enum Token {

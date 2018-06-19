@@ -6,7 +6,7 @@ use query::execute::execute_query;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage::store::MetricStore;
-use time::TimeStamp;
+use time::TimeBucket;
 use tokio;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
@@ -72,7 +72,11 @@ fn process(mut input: &[u8], output: &mut Vec<u8>, db: Arc<MetricStore>) {
 
 fn process_request(req: Message, db: &MetricStore) -> Message {
     match req {
-        Message::InsertReq { metric, ts, sketch } => process_insert(&metric, ts, sketch, db),
+        Message::InsertReq {
+            metric,
+            bucket,
+            sketch,
+        } => process_insert(&metric, bucket, sketch, db),
         Message::QueryReq(q) => process_query(&q, db),
         _ => Message::ErrorResp("Invalid message type".to_string()),
     }
@@ -80,11 +84,11 @@ fn process_request(req: Message, db: &MetricStore) -> Message {
 
 fn process_insert(
     metric: &str,
-    ts: TimeStamp,
+    bucket: TimeBucket,
     sketch: SerializableSketch,
     db: &MetricStore,
 ) -> Message {
-    match db.insert(metric, ts, sketch) {
+    match db.insert(metric, bucket, sketch) {
         Ok(_) => Message::InsertSuccessResp,
         Err(err) => Message::ErrorResp(format!("{:?}", err)),
     }

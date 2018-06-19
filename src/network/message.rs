@@ -2,13 +2,13 @@ use encode::{Decodable, Encodable, EncodableError};
 use quantile::serializable::SerializableSketch;
 use query::result::QueryResult;
 use std::io::{Read, Write};
-use time::TimeStamp;
+use time::TimeBucket;
 
 #[derive(Debug)]
 pub enum Message {
     InsertReq {
         metric: String,
-        ts: TimeStamp,
+        bucket: TimeBucket,
         sketch: SerializableSketch,
     },
     QueryReq(String),
@@ -31,10 +31,14 @@ where
 {
     fn encode(&self, mut writer: &mut W) -> Result<(), EncodableError> {
         match self {
-            Message::InsertReq { metric, ts, sketch } => {
+            Message::InsertReq {
+                metric,
+                bucket,
+                sketch,
+            } => {
                 INSERT_REQ_MSG_TYPE.encode(&mut writer)?;
                 metric.encode(&mut writer)?;
-                ts.encode(&mut writer)?;
+                bucket.encode(&mut writer)?;
                 sketch.encode(&mut writer)?;
             }
             Message::InsertSuccessResp => {
@@ -66,9 +70,13 @@ where
         match msg_type {
             INSERT_REQ_MSG_TYPE => {
                 let metric = String::decode(&mut reader)?;
-                let ts = TimeStamp::decode(&mut reader)?;
+                let bucket = TimeBucket::decode(&mut reader)?;
                 let sketch = SerializableSketch::decode(&mut reader)?;
-                Ok(Message::InsertReq { metric, ts, sketch })
+                Ok(Message::InsertReq {
+                    metric,
+                    bucket,
+                    sketch,
+                })
             }
             INSERT_SUCCESS_RESP_MSG_TYPE => Ok(Message::InsertSuccessResp),
             QUERY_REQ_MSG_TYPE => {
@@ -97,16 +105,20 @@ mod tests {
     fn it_encodes_and_decodes_insert_msg() {
         let msg = Message::InsertReq {
             metric: "foo".to_string(),
-            ts: 30_000,
+            bucket: 2,
             sketch: SerializableSketch::new(3, vec![Block::from_sorted_values(&vec![1, 2, 3])]),
         };
         let mut buf = Vec::new();
         msg.encode(&mut buf).expect("Could not encode insert msg");
         let decoded = Message::decode(&mut &buf[..]).expect("Could not decode insert msg");
         match decoded {
-            Message::InsertReq { metric, ts, sketch } => {
+            Message::InsertReq {
+                metric,
+                bucket,
+                sketch,
+            } => {
                 assert_eq!(metric, "foo");
-                assert_eq!(ts, 30_000);
+                assert_eq!(bucket, 2);
                 assert_eq!(sketch.to_readable().size(), 3);
             }
             _ => panic!("Decoded wrong message type"),

@@ -1,14 +1,14 @@
-use time::{TimeRange, TimeBucket, TIME_BUCKET_MS, ts_to_bucket, bucket_to_range};
-use std::collections::BTreeMap;
-use query::ops::{QueryOp, OpOutput};
-use query::error::QueryError;
 use quantile::mergable::MergableSketch;
+use query::error::QueryError;
+use query::ops::{OpOutput, QueryOp};
+use std::collections::BTreeMap;
+use time::{bucket_to_range, ts_to_bucket, TimeBucket, TimeRange, TIME_BUCKET_MS};
 
 pub struct BucketOp<'a> {
     bucket_size: u64,
     input: Box<QueryOp + 'a>,
     bucket_map: BTreeMap<TimeBucket, MergableSketch>,
-    bucket_queue: Vec<TimeBucket>
+    bucket_queue: Vec<TimeBucket>,
 }
 
 impl<'a> BucketOp<'a> {
@@ -17,7 +17,7 @@ impl<'a> BucketOp<'a> {
             bucket_size: BucketOp::bucket_size(hours),
             input: input,
             bucket_map: BTreeMap::new(),
-            bucket_queue: Vec::new()
+            bucket_queue: Vec::new(),
         }
     }
 
@@ -27,13 +27,14 @@ impl<'a> BucketOp<'a> {
                 Ok(OpOutput::Sketch(window, sketch)) => {
                     BucketOp::validate_window(window)?;
                     let bucket = self.bucket_for_window(window);
-                    self.bucket_map.entry(bucket)
+                    self.bucket_map
+                        .entry(bucket)
                         .and_modify(|s| s.merge(&sketch))
                         .or_insert_with(|| MergableSketch::empty());
-                },
+                }
                 Ok(OpOutput::End) => return Ok(()),
                 Err(err) => return Err(err),
-                _ => return Err(QueryError::InvalidInput)
+                _ => return Err(QueryError::InvalidInput),
             }
         }
     }
@@ -80,14 +81,13 @@ impl<'a> QueryOp for BucketOp<'a> {
             Some(bucket) => {
                 if let Some(sketch) = self.bucket_map.remove(&bucket) {
                     let window = self.window_for_bucket(bucket);
-                    println!("DEBUG: bucket={}, window={:?}", bucket, window);
                     let output = OpOutput::Sketch(window, sketch);
                     Ok(output)
                 } else {
                     panic!("Could not retrieve sketch from bucket map");
                 }
-            },
-            None => Ok(OpOutput::End)
+            }
+            None => Ok(OpOutput::End),
         }
     }
 }

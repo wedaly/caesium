@@ -4,7 +4,7 @@ use caesium::network::client::Client;
 use caesium::network::error::NetworkError;
 use caesium::quantile::serializable::SerializableSketch;
 use caesium::quantile::writable::WritableSketch;
-use caesium::time::TimeStamp;
+use caesium::time::TimeBucket;
 use std::env;
 use std::fs::File;
 use std::io;
@@ -15,7 +15,7 @@ use std::num::ParseIntError;
 #[derive(Debug)]
 struct Args {
     metric: String,
-    ts: TimeStamp,
+    bucket: TimeBucket,
     path: String,
 }
 
@@ -24,7 +24,7 @@ fn main() -> Result<(), Error> {
     let sketch = build_sketch(&args.path)?;
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000);
     let mut client = Client::new(addr);
-    client.insert(args.metric.to_string(), args.ts, sketch)?;
+    client.insert(args.metric.to_string(), args.bucket, sketch)?;
     Ok(())
 }
 
@@ -32,16 +32,18 @@ fn parse_args() -> Result<Args, Error> {
     let metric = env::args()
         .nth(1)
         .ok_or(Error::ArgParseError("Missing required argument `metric`"))?;
-    let ts = env::args()
+    let bucket = env::args()
         .nth(2)
-        .ok_or(Error::ArgParseError(
-            "Missing required argument `timestamp`",
-        ))
-        .and_then(|s| s.parse::<TimeStamp>().map_err(From::from))?;
+        .ok_or(Error::ArgParseError("Missing required argument `bucket`"))
+        .and_then(|s| s.parse::<TimeBucket>().map_err(From::from))?;
     let path = env::args()
         .nth(3)
         .ok_or(Error::ArgParseError("Missing required argument `path`"))?;
-    Ok(Args { metric, ts, path })
+    Ok(Args {
+        metric,
+        bucket,
+        path,
+    })
 }
 
 fn build_sketch(path: &str) -> Result<SerializableSketch, Error> {

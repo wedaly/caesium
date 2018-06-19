@@ -44,9 +44,9 @@ trap 'kill $(jobs -p)' EXIT
 ########## TEST ###########
 setup
 background_server
-insert "m1" 30000 $DATA/one_to_ten.txt
-insert "m2" 30000 $DATA/one_to_ten.txt
-insert "m2" 80000 $DATA/ten_to_twenty.txt
+insert "m1" 1 $DATA/one_to_ten.txt
+insert "m2" 1 $DATA/one_to_ten.txt
+insert "m2" 2 $DATA/ten_to_twenty.txt
 query "quantile(0.5, fetch(m1))" "m1_median.txt"
 query "quantile(0.5, fetch(m2))" "m2_median.txt"
 check "m1_median.txt"
