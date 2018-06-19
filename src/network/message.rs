@@ -139,10 +139,7 @@ mod tests {
 
     #[test]
     fn it_encodes_and_decodes_query_success_msg() {
-        let results = vec![
-            QueryResult::new(0, 30_000, 1),
-            QueryResult::new(30_000, 60_000, 2),
-        ];
+        let results = vec![QueryResult::new(0, 30, 1), QueryResult::new(30, 60, 2)];
         let msg = Message::QuerySuccessResp(results);
         let mut buf = Vec::new();
         msg.encode(&mut buf)
@@ -154,13 +151,13 @@ mod tests {
                 assert_eq!(results.len(), 2);
 
                 let first = results.get(0).unwrap();
-                assert_eq!(first.range.start, 0);
-                assert_eq!(first.range.end, 30_000);
+                assert_eq!(first.range.start(), 0);
+                assert_eq!(first.range.end(), 30);
                 assert_eq!(first.value, 1);
 
                 let second = results.get(1).unwrap();
-                assert_eq!(second.range.start, 30_000);
-                assert_eq!(second.range.end, 60_000);
+                assert_eq!(second.range.start(), 30);
+                assert_eq!(second.range.end(), 60);
                 assert_eq!(second.value, 2);
             }
             _ => panic!("Decoded wrong message type"),

@@ -10,7 +10,7 @@ pub struct QueryResult {
 
 impl QueryResult {
     pub fn new(start: TimeStamp, end: TimeStamp, value: u64) -> QueryResult {
-        let range = TimeRange { start, end };
+        let range = TimeRange::new(start, end);
         QueryResult { range, value }
     }
 }
@@ -20,8 +20,7 @@ where
     W: Write,
 {
     fn encode(&self, mut writer: &mut W) -> Result<(), EncodableError> {
-        self.range.start.encode(&mut writer)?;
-        self.range.end.encode(&mut writer)?;
+        self.range.encode(&mut writer)?;
         self.value.encode(&mut writer)?;
         Ok(())
     }
@@ -32,10 +31,7 @@ where
     R: Read,
 {
     fn decode(mut reader: &mut R) -> Result<QueryResult, EncodableError> {
-        let range = TimeRange {
-            start: TimeStamp::decode(&mut reader)?,
-            end: TimeStamp::decode(&mut reader)?,
-        };
+        let range = TimeRange::decode(&mut reader)?;
         let value = u64::decode(&mut reader)?;
         Ok(QueryResult { range, value })
     }

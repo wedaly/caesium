@@ -5,7 +5,7 @@ use rocksdb;
 use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{bucket_to_range, ts_to_bucket, TimeBucket, TimeStamp};
+use time::{ts_to_bucket, TimeBucket, TimeRange, TimeStamp};
 
 pub struct MetricStore {
     raw_db: rocksdb::DB,
@@ -133,7 +133,7 @@ impl DataCursor for MetricCursor {
                 } else {
                     debug!("Fetching key for metric {} and bucket {}", metric, bucket);
                     let mut val_bytes: &[u8] = &val;
-                    let range = bucket_to_range(bucket, 1);
+                    let range = TimeRange::from_bucket(bucket, 1);
                     let sketch = SerializableSketch::decode(&mut val_bytes)?.to_mergable();
                     Some(DataRow { range, sketch })
                 }
@@ -174,7 +174,7 @@ mod tests {
                 .fetch_range(&metric, None, None)
                 .expect("Could not fetch range");
             let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30_000, 50);
+            assert_row(first_row, 0, 30, 50);
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })
@@ -188,13 +188,13 @@ mod tests {
                 .insert(&metric, 0, build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&"bar", 60_000, build_sketch())
+                .insert(&"bar", 2, build_sketch())
                 .expect("Could not insert sketch");
             let mut cursor = store
                 .fetch_range(&metric, None, None)
                 .expect("Could not fetch range");
             let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30_000, 50);
+            assert_row(first_row, 0, 30, 50);
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })
@@ -205,10 +205,10 @@ mod tests {
         with_test_store(|store| {
             let (m1, m2) = ("m1", "m2");
             store
-                .insert(&m1, 30000, build_sketch())
+                .insert(&m1, 1, build_sketch())
                 .expect("Could not insert first sketch");
             store
-                .insert(&m2, 30000, build_sketch())
+                .insert(&m2, 1, build_sketch())
                 .expect("Could not insert second sketch");
             let mut cursor = store
                 .fetch_range(&m1, None, None)
@@ -236,12 +236,12 @@ mod tests {
                 .insert(&metric, 6, build_sketch())
                 .expect("Could not insert sketch");
             let mut cursor = store
-                .fetch_range(&metric, Some(85_000), Some(150_000))
+                .fetch_range(&metric, Some(85), Some(150))
                 .expect("Could not fetch range");
             let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 90_000, 120_000, 50);
+            assert_row(first_row, 90, 120, 50);
             let second_row = cursor.get_next().expect("Could not get second row");
-            assert_row(second_row, 120_000, 150_000, 50);
+            assert_row(second_row, 120, 150, 50);
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })
@@ -261,7 +261,7 @@ mod tests {
                 .fetch_range(&metric, None, None)
                 .expect("Could not fetch range");
             let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30_000, 2);
+            assert_row(first_row, 0, 30, 2);
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })
@@ -294,8 +294,8 @@ mod tests {
 
     fn assert_row(row_opt: Option<DataRow>, start: TimeStamp, end: TimeStamp, median: u64) {
         if let Some(row) = row_opt {
-            assert_eq!(row.range.start, start);
-            assert_eq!(row.range.end, end);
+            assert_eq!(row.range.start(), start);
+            assert_eq!(row.range.end(), end);
             let val = row.sketch
                 .to_readable()
                 .query(0.5)

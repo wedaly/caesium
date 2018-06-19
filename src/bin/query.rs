@@ -32,6 +32,6 @@ fn handle_query(client: &mut Client, q: &str) {
 
 fn print_results(results: &[QueryResult]) {
     for r in results.iter() {
-        println!("[{}, {}] {}", r.range.start, r.range.end, r.value);
+        println!("[{}, {}] {}", r.range.start(), r.range.end(), r.value);
     }
 }

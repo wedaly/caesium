@@ -5,7 +5,7 @@ use query::result::QueryResult;
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{bucket_to_range, TimeBucket, TimeStamp, TIME_BUCKET_MS};
+use time::{TimeBucket, TimeRange, TimeStamp, SECONDS_PER_BUCKET};
 
 struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
@@ -65,7 +65,7 @@ fn build_data_row(bucket: TimeBucket) -> DataRow {
         s.insert(i as u64);
     }
     DataRow {
-        range: bucket_to_range(bucket, 1),
+        range: TimeRange::from_bucket(bucket, 1),
         sketch: s.to_serializable().to_mergable(),
     }
 }
@@ -84,7 +84,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r1,
         QueryResult {
-            range: bucket_to_range(1, 1),
+            range: TimeRange::from_bucket(1, 1),
             value: 50
         }
     );
@@ -93,7 +93,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r2,
         QueryResult {
-            range: bucket_to_range(2, 1),
+            range: TimeRange::from_bucket(2, 1),
             value: 50
         }
     );
@@ -114,7 +114,7 @@ fn it_queries_quantile_metric_not_found() {
 fn it_queries_quantile_bucket_by_hour() {
     let mut source = MockDataSource::new();
     let hours = 2;
-    let buckets_per_hour = 3_600_000 / TIME_BUCKET_MS;
+    let buckets_per_hour = 3_600 / SECONDS_PER_BUCKET;
     let num_buckets = hours * buckets_per_hour;
     for i in 0..num_buckets {
         source.add_row("foo", build_data_row(i))
@@ -123,8 +123,7 @@ fn it_queries_quantile_bucket_by_hour() {
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_eq!(results.len(), hours as usize);
     for row in results.iter() {
-        let interval = row.range.end - row.range.start;
-        assert_eq!(interval, 3_600_000);
+        assert_eq!(row.range.duration(), 3_600);
     }
 }
 
@@ -132,7 +131,7 @@ fn it_queries_quantile_bucket_by_hour() {
 fn it_queries_quantile_bucket_by_day() {
     let mut source = MockDataSource::new();
     let days = 2;
-    let buckets_per_day = 86_400_000 / TIME_BUCKET_MS;
+    let buckets_per_day = 86_400 / SECONDS_PER_BUCKET;
     let num_buckets = days * buckets_per_day;
     for i in 0..num_buckets {
         source.add_row("foo", build_data_row(i))
@@ -141,8 +140,7 @@ fn it_queries_quantile_bucket_by_day() {
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_eq!(results.len(), days as usize);
     for row in results.iter() {
-        let interval = row.range.end - row.range.start;
-        assert_eq!(interval, 86_400_000);
+        assert_eq!(row.range.duration(), 86_400);
     }
 }
 
@@ -150,7 +148,7 @@ fn it_queries_quantile_bucket_by_day() {
 fn it_errors_if_bucket_applied_twice() {
     let mut source = MockDataSource::new();
     let hours = 2;
-    let buckets_per_hour = 3_600_000 / TIME_BUCKET_MS;
+    let buckets_per_hour = 3_600 / SECONDS_PER_BUCKET;
     let num_buckets = hours * buckets_per_hour;
     for i in 0..num_buckets {
         source.add_row("foo", build_data_row(i))
@@ -158,7 +156,7 @@ fn it_errors_if_bucket_applied_twice() {
     let query = "quantile(0.5, bucket(1, bucket(5, fetch(foo))))";
     match execute_query(&query, &mut source) {
         Err(QueryError::InvalidWindowSize(s)) => {
-            assert_eq!(s, 18_000_000);
+            assert_eq!(s, 18_000);
         }
         _ => panic!("Expected invalid window size error!"),
     }

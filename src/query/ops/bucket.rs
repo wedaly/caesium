@@ -2,7 +2,7 @@ use quantile::mergable::MergableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::collections::BTreeMap;
-use time::{bucket_to_range, ts_to_bucket, TimeBucket, TimeRange, TIME_BUCKET_MS};
+use time::{TimeBucket, TimeRange, SECONDS_PER_BUCKET};
 
 pub struct BucketOp<'a> {
     bucket_size: u64,
@@ -26,7 +26,7 @@ impl<'a> BucketOp<'a> {
             match self.input.get_next() {
                 Ok(OpOutput::Sketch(window, sketch)) => {
                     BucketOp::validate_window(window)?;
-                    let bucket = self.bucket_for_window(window);
+                    let bucket = window.to_bucket(self.bucket_size);
                     self.bucket_map
                         .entry(bucket)
                         .and_modify(|s| s.merge(&sketch))
@@ -47,23 +47,19 @@ impl<'a> BucketOp<'a> {
     }
 
     fn bucket_size(hours: u64) -> u64 {
-        let buckets_per_hr = 3_600_000 / TIME_BUCKET_MS;
+        let buckets_per_hr = 3_600 / SECONDS_PER_BUCKET;
         hours * buckets_per_hr
     }
 
-    fn bucket_for_window(&self, window: TimeRange) -> TimeBucket {
-        ts_to_bucket(window.start, self.bucket_size)
-    }
-
     fn window_for_bucket(&self, bucket: TimeBucket) -> TimeRange {
-        bucket_to_range(bucket, self.bucket_size)
+        TimeRange::from_bucket(bucket, self.bucket_size)
     }
 
     fn validate_window(window: TimeRange) -> Result<(), QueryError> {
-        let interval = window.end - window.start;
-        if interval > TIME_BUCKET_MS {
+        let duration = window.duration();
+        if duration > SECONDS_PER_BUCKET {
             // Example: bucket(1, bucket(24, fetch(foo)))
-            Err(QueryError::InvalidWindowSize(interval))
+            Err(QueryError::InvalidWindowSize(duration))
         } else {
             Ok(())
         }
