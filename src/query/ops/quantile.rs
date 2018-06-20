@@ -1,7 +1,7 @@
 use quantile::mergable::MergableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
-use time::TimeRange;
+use time::TimeWindow;
 
 pub struct QuantileOp<'a> {
     phi: f64,
@@ -19,7 +19,7 @@ impl<'a> QuantileOp<'a> {
 
     fn query_sketch(
         &self,
-        window: TimeRange,
+        window: TimeWindow,
         sketch: MergableSketch,
     ) -> Result<OpOutput, QueryError> {
         let quantile = sketch.to_readable().query(self.phi);

@@ -15,21 +15,21 @@ pub fn ts_to_bucket(ts: TimeStamp, bucket_size: u64) -> TimeBucket {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct TimeRange {
+pub struct TimeWindow {
     start: TimeStamp,
     end: TimeStamp,
 }
 
-impl TimeRange {
-    pub fn new(start: TimeStamp, end: TimeStamp) -> TimeRange {
+impl TimeWindow {
+    pub fn new(start: TimeStamp, end: TimeStamp) -> TimeWindow {
         assert!(start <= end);
-        TimeRange { start, end }
+        TimeWindow { start, end }
     }
 
-    pub fn from_bucket(bucket: TimeBucket, bucket_size: u64) -> TimeRange {
+    pub fn from_bucket(bucket: TimeBucket, bucket_size: u64) -> TimeWindow {
         let start = bucket * bucket_size * SECONDS_PER_BUCKET;
         let end = start + (bucket_size * SECONDS_PER_BUCKET);
-        TimeRange { start, end }
+        TimeWindow { start, end }
     }
 
     pub fn start(&self) -> TimeStamp {
@@ -49,7 +49,7 @@ impl TimeRange {
     }
 }
 
-impl<W> Encodable<W> for TimeRange
+impl<W> Encodable<W> for TimeWindow
 where
     W: Write,
 {
@@ -60,19 +60,19 @@ where
     }
 }
 
-impl<R> Decodable<TimeRange, R> for TimeRange
+impl<R> Decodable<TimeWindow, R> for TimeWindow
 where
     R: Read,
 {
-    fn decode(reader: &mut R) -> Result<TimeRange, EncodableError> {
+    fn decode(reader: &mut R) -> Result<TimeWindow, EncodableError> {
         let start = TimeStamp::decode(reader)?;
         let end = TimeStamp::decode(reader)?;
         if start > end {
             Err(EncodableError::FormatError(
-                "TimeRange start must be less than end",
+                "TimeWindow start must be less than end",
             ))
         } else {
-            Ok(TimeRange::new(start, end))
+            Ok(TimeWindow::new(start, end))
         }
     }
 }

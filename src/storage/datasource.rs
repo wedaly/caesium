@@ -1,10 +1,10 @@
 use quantile::mergable::MergableSketch;
 use storage::error::StorageError;
-use time::{TimeRange, TimeStamp};
+use time::{TimeWindow, TimeStamp};
 
 #[derive(Clone)]
 pub struct DataRow {
-    pub range: TimeRange,
+    pub window: TimeWindow,
     pub sketch: MergableSketch,
 }
 

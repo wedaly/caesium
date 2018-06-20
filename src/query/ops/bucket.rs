@@ -2,7 +2,7 @@ use quantile::mergable::MergableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::collections::BTreeMap;
-use time::{TimeBucket, TimeRange, SECONDS_PER_BUCKET};
+use time::{TimeBucket, TimeWindow, SECONDS_PER_BUCKET};
 
 pub struct BucketOp<'a> {
     bucket_size: u64,
@@ -51,11 +51,11 @@ impl<'a> BucketOp<'a> {
         hours * buckets_per_hr
     }
 
-    fn window_for_bucket(&self, bucket: TimeBucket) -> TimeRange {
-        TimeRange::from_bucket(bucket, self.bucket_size)
+    fn window_for_bucket(&self, bucket: TimeBucket) -> TimeWindow {
+        TimeWindow::from_bucket(bucket, self.bucket_size)
     }
 
-    fn validate_window(window: TimeRange) -> Result<(), QueryError> {
+    fn validate_window(window: TimeWindow) -> Result<(), QueryError> {
         let duration = window.duration();
         if duration > SECONDS_PER_BUCKET {
             // Example: bucket(1, bucket(24, fetch(foo)))

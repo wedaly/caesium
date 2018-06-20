@@ -5,7 +5,7 @@ use query::result::QueryResult;
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{TimeBucket, TimeRange, TimeStamp, SECONDS_PER_BUCKET};
+use time::{TimeBucket, TimeWindow, TimeStamp, SECONDS_PER_BUCKET};
 
 struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
@@ -65,7 +65,7 @@ fn build_data_row(bucket: TimeBucket) -> DataRow {
         s.insert(i as u64);
     }
     DataRow {
-        range: TimeRange::from_bucket(bucket, 1),
+        window: TimeWindow::from_bucket(bucket, 1),
         sketch: s.to_serializable().to_mergable(),
     }
 }
@@ -84,7 +84,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r1,
         QueryResult {
-            range: TimeRange::from_bucket(1, 1),
+            window: TimeWindow::from_bucket(1, 1),
             value: 50
         }
     );
@@ -93,7 +93,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r2,
         QueryResult {
-            range: TimeRange::from_bucket(2, 1),
+            window: TimeWindow::from_bucket(2, 1),
             value: 50
         }
     );
@@ -123,7 +123,7 @@ fn it_queries_quantile_bucket_by_hour() {
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_eq!(results.len(), hours as usize);
     for row in results.iter() {
-        assert_eq!(row.range.duration(), 3_600);
+        assert_eq!(row.window.duration(), 3_600);
     }
 }
 
@@ -140,7 +140,7 @@ fn it_queries_quantile_bucket_by_day() {
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_eq!(results.len(), days as usize);
     for row in results.iter() {
-        assert_eq!(row.range.duration(), 86_400);
+        assert_eq!(row.window.duration(), 86_400);
     }
 }
 

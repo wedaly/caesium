@@ -5,7 +5,7 @@ use rocksdb;
 use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{ts_to_bucket, TimeBucket, TimeRange, TimeStamp};
+use time::{ts_to_bucket, TimeBucket, TimeWindow, TimeStamp};
 
 pub struct MetricStore {
     raw_db: rocksdb::DB,
@@ -133,9 +133,9 @@ impl DataCursor for MetricCursor {
                 } else {
                     debug!("Fetching key for metric {} and bucket {}", metric, bucket);
                     let mut val_bytes: &[u8] = &val;
-                    let range = TimeRange::from_bucket(bucket, 1);
+                    let window = TimeWindow::from_bucket(bucket, 1);
                     let sketch = SerializableSketch::decode(&mut val_bytes)?.to_mergable();
-                    Some(DataRow { range, sketch })
+                    Some(DataRow { window, sketch })
                 }
             }
         };
@@ -294,8 +294,8 @@ mod tests {
 
     fn assert_row(row_opt: Option<DataRow>, start: TimeStamp, end: TimeStamp, median: u64) {
         if let Some(row) = row_opt {
-            assert_eq!(row.range.start(), start);
-            assert_eq!(row.range.end(), end);
+            assert_eq!(row.window.start(), start);
+            assert_eq!(row.window.end(), end);
             let val = row.sketch
                 .to_readable()
                 .query(0.5)

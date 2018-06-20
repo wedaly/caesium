@@ -18,7 +18,7 @@ impl<'a> QueryOp for FetchOp<'a> {
         let next = self.cursor.get_next()?;
         match next {
             None => Ok(OpOutput::End),
-            Some(row) => Ok(OpOutput::Sketch(row.range, row.sketch)),
+            Some(row) => Ok(OpOutput::Sketch(row.window, row.sketch)),
         }
     }
 }

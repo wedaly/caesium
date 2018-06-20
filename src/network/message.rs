@@ -151,13 +151,13 @@ mod tests {
                 assert_eq!(results.len(), 2);
 
                 let first = results.get(0).unwrap();
-                assert_eq!(first.range.start(), 0);
-                assert_eq!(first.range.end(), 30);
+                assert_eq!(first.window.start(), 0);
+                assert_eq!(first.window.end(), 30);
                 assert_eq!(first.value, 1);
 
                 let second = results.get(1).unwrap();
-                assert_eq!(second.range.start(), 30);
-                assert_eq!(second.range.end(), 60);
+                assert_eq!(second.window.start(), 30);
+                assert_eq!(second.window.end(), 60);
                 assert_eq!(second.value, 2);
             }
             _ => panic!("Decoded wrong message type"),

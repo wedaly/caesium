@@ -1,11 +1,11 @@
 use quantile::mergable::MergableSketch;
 use query::error::QueryError;
-use time::TimeRange;
+use time::TimeWindow;
 
 pub enum OpOutput {
     End,
-    Sketch(TimeRange, MergableSketch),
-    Quantile(TimeRange, Option<u64>),
+    Sketch(TimeWindow, MergableSketch),
+    Quantile(TimeWindow, Option<u64>),
 }
 
 pub trait QueryOp {

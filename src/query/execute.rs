@@ -11,10 +11,10 @@ pub fn execute_query<'a>(query: &str, source: &DataSource) -> Result<Vec<QueryRe
         let output = pipeline.get_next()?;
         match output {
             OpOutput::End => break,
-            OpOutput::Quantile(range, value_opt) => {
+            OpOutput::Quantile(window, value_opt) => {
                 if let Some(value) = value_opt {
                     results.push(QueryResult {
-                        range: range,
+                        window: window,
                         value: value,
                     })
                 }
