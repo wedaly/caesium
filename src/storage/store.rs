@@ -160,7 +160,7 @@ impl DataCursor for MetricCursor {
                 let mut key_reader = Cursor::new(key);
                 let metric = String::decode(&mut key_reader)?;
                 let window_start = u64::decode(&mut key_reader)?;
-                if metric != self.metric || window_start > self.end {
+                if metric != self.metric || window_start >= self.end {
                     None
                 } else {
                     debug!(
@@ -230,6 +230,33 @@ mod tests {
                 .expect("Could not fetch range");
             let first_row = cursor.get_next().expect("Could not get first row");
             assert_row(first_row, 0, 30, 50);
+            let next_row = cursor.get_next().expect("Could not get next row");
+            assert!(next_row.is_none());
+        })
+    }
+
+    #[test]
+    fn it_fetches_select_by_time_range() {
+        with_test_store(|store| {
+            store
+                .insert(&"foo", TimeWindow::new(0, 30), build_sketch())
+                .expect("Could not insert sketch");
+            store
+                .insert(&"foo", TimeWindow::new(30, 60), build_sketch())
+                .expect("Could not insert sketch");
+            store
+                .insert(&"foo", TimeWindow::new(60, 90), build_sketch())
+                .expect("Could not insert sketch");
+            store
+                .insert(&"foo", TimeWindow::new(90, 120), build_sketch())
+                .expect("Could not insert sketch");
+            let mut cursor = store
+                .fetch_range(&"foo", Some(30), Some(90))
+                .expect("Could not fetch range");
+            let first_row = cursor.get_next().expect("Could not get first row");
+            assert_row(first_row, 30, 60, 50);
+            let second_row = cursor.get_next().expect("Could not get second row");
+            assert_row(second_row, 60, 90, 50);
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })

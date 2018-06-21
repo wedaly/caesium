@@ -30,11 +30,16 @@ impl DataSource for MockDataSource {
     fn fetch_range<'a>(
         &'a self,
         metric: &str,
-        _start: Option<TimeStamp>,
-        _end: Option<TimeStamp>,
+        start: Option<TimeStamp>,
+        end: Option<TimeStamp>,
     ) -> Result<Box<DataCursor + 'a>, StorageError> {
         match self.data.get(metric) {
-            Some(rows) => Ok(Box::new(MockDataCursor::new(&rows))),
+            Some(rows) => {
+                let start_ts = start.unwrap_or(0);
+                let end_ts = end.unwrap_or(TimeStamp::max_value());
+                let cursor = MockDataCursor::new(rows, start_ts, end_ts);
+                Ok(Box::new(cursor))
+            }
             None => Err(StorageError::NotFound),
         }
     }
@@ -43,19 +48,34 @@ impl DataSource for MockDataSource {
 struct MockDataCursor<'a> {
     idx: usize,
     data: &'a [DataRow],
+    start_ts: TimeStamp,
+    end_ts: TimeStamp,
 }
 
 impl<'a> MockDataCursor<'a> {
-    fn new(data: &[DataRow]) -> MockDataCursor {
-        MockDataCursor { idx: 0, data: data }
+    fn new(data: &[DataRow], start_ts: TimeStamp, end_ts: TimeStamp) -> MockDataCursor {
+        MockDataCursor {
+            idx: 0,
+            data,
+            start_ts,
+            end_ts,
+        }
     }
 }
 
 impl<'a> DataCursor for MockDataCursor<'a> {
     fn get_next(&mut self) -> Result<Option<DataRow>, StorageError> {
-        let row_opt = self.data.get(self.idx).cloned();
-        self.idx += 1;
-        Ok(row_opt)
+        while self.idx < self.data.len() {
+            let row_opt = self.data.get(self.idx).cloned();
+            self.idx += 1;
+
+            if let Some(row) = row_opt {
+                if row.window.start() >= self.start_ts && row.window.end() <= self.end_ts {
+                    return Ok(Some(row));
+                }
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -94,6 +114,36 @@ fn it_queries_quantile_by_metric() {
         *r2,
         QueryResult {
             window: TimeWindow::new(2, 3),
+            value: 50
+        }
+    );
+}
+
+#[test]
+fn it_queries_quantile_select_time_range() {
+    let mut source = MockDataSource::new();
+    source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
+    source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
+    source.add_row("foo", build_data_row(TimeWindow::new(30, 40)));
+    source.add_row("foo", build_data_row(TimeWindow::new(40, 50)));
+    let query = "quantile(0.5, fetch(foo, 20, 40))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), 2);
+
+    let r1 = results.get(0).unwrap();
+    assert_eq!(
+        *r1,
+        QueryResult {
+            window: TimeWindow::new(20, 30),
+            value: 50
+        }
+    );
+
+    let r2 = results.get(1).unwrap();
+    assert_eq!(
+        *r2,
+        QueryResult {
+            window: TimeWindow::new(30, 40),
             value: 50
         }
     );

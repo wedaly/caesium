@@ -36,7 +36,9 @@ fn build_fetch_op<'a>(
     source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     let metric = get_string_arg(args, 0)?;
-    let op = FetchOp::new(metric, source)?;
+    let start_ts = get_optional_arg(get_int_arg, args, 1)?;
+    let end_ts = get_optional_arg(get_int_arg, args, 2)?;
+    let op = FetchOp::new(metric, source, start_ts, end_ts)?;
     Ok(Box::new(op))
 }
 
@@ -59,10 +61,35 @@ fn build_coalesce_op<'a>(
     Ok(Box::new(op))
 }
 
+fn get_optional_arg<F, T>(
+    f: F,
+    args: &[Box<Expression>],
+    idx: usize,
+) -> Result<Option<T>, QueryError>
+where
+    F: FnOnce(&[Box<Expression>], usize) -> Result<T, QueryError>,
+{
+    match f(args, idx) {
+        Ok(v) => Ok(Some(v)),
+        Err(QueryError::MissingArg) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 fn get_string_arg(args: &[Box<Expression>], idx: usize) -> Result<String, QueryError> {
     match args.get(idx) {
         Some(expr) => match **expr {
             Expression::StringLiteral(ref s) => Ok(s.to_string()),
+            _ => Err(QueryError::InvalidArgType),
+        },
+        None => Err(QueryError::MissingArg),
+    }
+}
+
+fn get_int_arg(args: &[Box<Expression>], idx: usize) -> Result<u64, QueryError> {
+    match args.get(idx) {
+        Some(expr) => match **expr {
+            Expression::IntLiteral(i) => Ok(i),
             _ => Err(QueryError::InvalidArgType),
         },
         None => Err(QueryError::MissingArg),
