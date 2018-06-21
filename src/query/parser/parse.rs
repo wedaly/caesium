@@ -4,7 +4,7 @@ use query::parser::tokenize::{tokenize, Token, TokenizeError};
 #[derive(Debug)]
 pub enum ParseError {
     TokenizeError(TokenizeError),
-    UnexpectedToken,
+    UnexpectedToken(Token),
     UnexpectedEnd,
 }
 
@@ -18,7 +18,8 @@ pub fn parse(s: &str) -> Result<Box<Expression>, ParseError> {
     let tokens = tokenize(s)?;
     let (c, expr) = parse_expr(&tokens)?;
     if c < tokens.len() {
-        Err(ParseError::UnexpectedToken)
+        let t = tokens[c].clone();
+        Err(ParseError::UnexpectedToken(t))
     } else {
         Ok(expr)
     }
@@ -34,49 +35,60 @@ fn parse_expr(tokens: &[Token]) -> ParseResult<Box<Expression>> {
             Some(Token::LeftParen) => parse_function_call(tokens),
             _ => Ok((1, Box::new(Expression::StringLiteral(s.to_string())))),
         },
-        Some(_) => Err(ParseError::UnexpectedToken),
+        Some(t) => Err(ParseError::UnexpectedToken(t.clone())),
         None => Err(ParseError::UnexpectedEnd),
     }
 }
 
 fn parse_function_call(tokens: &[Token]) -> ParseResult<Box<Expression>> {
     let call_toks = (tokens.first(), tokens.get(1), tokens.last());
-    if let (Some(Token::Symbol(name)), Some(Token::LeftParen), Some(Token::RightParen)) = call_toks
-    {
-        let (c, args) = parse_arg_list(&tokens[2..tokens.len() - 1])?;
-        let func = Box::new(Expression::FunctionCall(name.to_string(), args));
-        Ok((c + 3, func))
-    } else if let (Some(_), Some(_), Some(_)) = call_toks {
-        Err(ParseError::UnexpectedToken)
-    } else {
-        Err(ParseError::UnexpectedEnd)
+    match call_toks {
+        (Some(Token::Symbol(name)), Some(Token::LeftParen), Some(Token::RightParen)) => {
+            let (c, args) = parse_arg_list(&tokens[2..])?;
+            let func = Box::new(Expression::FunctionCall(name.to_string(), args));
+            Ok((c + 3, func))
+        }
+        (Some(t), Some(Token::LeftParen), Some(Token::RightParen)) => {
+            Err(ParseError::UnexpectedToken(t.clone()))
+        }
+        (Some(Token::Symbol(_)), Some(t), Some(Token::RightParen)) => {
+            Err(ParseError::UnexpectedToken(t.clone()))
+        }
+        (Some(Token::Symbol(_)), Some(Token::LeftParen), Some(t)) => {
+            Err(ParseError::UnexpectedToken(t.clone()))
+        }
+        _ => Err(ParseError::UnexpectedEnd),
     }
 }
 
 fn parse_arg_list(tokens: &[Token]) -> ParseResult<Vec<Box<Expression>>> {
     let mut args = Vec::new();
     let mut c = 0;
-    while c < tokens.len() {
+    loop {
+        match tokens.get(c) {
+            Some(Token::RightParen) => {
+                return Ok((c, args));
+            }
+            None => {
+                return Err(ParseError::UnexpectedEnd);
+            }
+            _ => {}
+        }
+
         let (consumed, arg) = parse_expr(&tokens[c..])?;
         c += consumed;
         args.push(arg);
 
-        if let Some(Token::Comma) = tokens.get(c) {
-            if c < tokens.len() - 1 {
+        match tokens.get(c) {
+            Some(Token::Comma) => {
                 c += 1;
-                continue;
-            } else {
-                break;
             }
-        } else {
-            break;
+            Some(Token::RightParen) => {} // Handled next iteration
+            Some(t) => {
+                return Err(ParseError::UnexpectedToken(t.clone()));
+            }
+            None => {} // Handled next iteration
         }
-    }
-
-    if c < tokens.len() {
-        Err(ParseError::UnexpectedToken)
-    } else {
-        Ok((c, args))
     }
 }
 
@@ -167,6 +179,48 @@ mod tests {
     }
 
     #[test]
+    fn it_parses_two_function_calls_args() {
+        let ast = parse(&"f(g(1), h())").expect("Could not parse input string");
+        match { *ast } {
+            Expression::FunctionCall(name, args) => {
+                assert_eq!(name, "f");
+                assert_eq!(args.len(), 2);
+
+                let first_arg = args.first().unwrap();
+                match **first_arg {
+                    Expression::FunctionCall(ref name, ref args) => {
+                        assert_eq!(name, "g");
+                        assert_eq!(args.len(), 1);
+                    }
+                    _ => panic!("Expected function call for first arg"),
+                }
+
+                let second_arg = args.get(1).unwrap();
+                match **second_arg {
+                    Expression::FunctionCall(ref name, ref args) => {
+                        assert_eq!(name, "h");
+                        assert_eq!(args.len(), 0);
+                    }
+                    _ => panic!("Expected function call for second arg"),
+                }
+            }
+            _ => panic!("Expected function call"),
+        }
+    }
+
+    #[test]
+    fn it_allows_trailing_comma_in_function_call_args() {
+        let ast = parse(&"f(1,2,)").expect("Could not parse input string");
+        match { *ast } {
+            Expression::FunctionCall(name, args) => {
+                assert_eq!(name, "f");
+                assert_eq!(args.len(), 2);
+            }
+            _ => panic!("Expected function call"),
+        }
+    }
+
+    #[test]
     fn it_rejects_empty_input() {
         assert_rejects("");
         assert_rejects(" ");
@@ -183,7 +237,6 @@ mod tests {
         assert_rejects("foo)");
         assert_rejects("123()");
         assert_rejects("123ab()");
-        assert_rejects("foo(x,)");
         assert_rejects("foo(,x)");
         assert_rejects("foo(123x)");
         assert_rejects("foo(,");

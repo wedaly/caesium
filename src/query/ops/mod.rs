@@ -13,5 +13,6 @@ pub trait QueryOp {
 }
 
 pub mod coalesce;
+pub mod combine;
 pub mod fetch;
 pub mod quantile;

@@ -1,6 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Symbol(String),
     Int(u64),

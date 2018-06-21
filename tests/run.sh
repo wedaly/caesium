@@ -50,11 +50,17 @@ insert "m2" 60 90 $DATA/ten_to_twenty.txt
 insert "m3" 10 20 $DATA/one_to_ten.txt
 insert "m3" 20 30 $DATA/ten_to_twenty.txt
 insert "m3" 50 100 $DATA/ten_to_twenty.txt
+insert "m4" 10 20 $DATA/one_to_ten.txt
+insert "m4" 15 40 $DATA/ten_to_twenty.txt
+insert "m5" 10 20 $DATA/one_to_ten.txt
+insert "m5" 15 40 $DATA/ten_to_twenty.txt
 query "quantile(0.5, fetch(m1))" "m1_median.txt"
 query "quantile(0.5, fetch(m2))" "m2_median.txt"
 query "quantile(0.5, coalesce(fetch(m3)))" "m3_median.txt"
+query "quantile(0.5, combine(fetch(m4), fetch(m5)))" "m4_m5_median.txt"
 check "m1_median.txt"
 check "m2_median.txt"
 check "m3_median.txt"
+check "m4_m5_median.txt"
 cleanup
 echo "ALL TESTS PASSED!"

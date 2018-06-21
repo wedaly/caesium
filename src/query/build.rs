@@ -1,5 +1,6 @@
 use query::error::QueryError;
 use query::ops::coalesce::CoalesceOp;
+use query::ops::combine::CombineOp;
 use query::ops::fetch::FetchOp;
 use query::ops::quantile::QuantileOp;
 use query::ops::QueryOp;
@@ -27,6 +28,7 @@ fn map_func_to_query_op<'a>(
         "fetch" => build_fetch_op(args, source),
         "quantile" => build_quantile_op(args, source),
         "coalesce" => build_coalesce_op(args, source),
+        "combine" => build_combine_op(args, source),
         f => Err(QueryError::UnrecognizedFunction(f.to_string())),
     }
 }
@@ -58,6 +60,18 @@ fn build_coalesce_op<'a>(
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     let input = get_func_arg(args, 0, source)?;
     let op = CoalesceOp::new(input);
+    Ok(Box::new(op))
+}
+
+fn build_combine_op<'a>(
+    args: &[Box<Expression>],
+    source: &'a DataSource,
+) -> Result<Box<QueryOp + 'a>, QueryError> {
+    let mut inputs = Vec::new();
+    for i in 0..args.len() {
+        inputs.push(get_func_arg(args, i, source)?);
+    }
+    let op = CombineOp::new(inputs);
     Ok(Box::new(op))
 }
 

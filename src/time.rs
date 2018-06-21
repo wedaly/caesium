@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 // Unix timestamp = seconds since 1970-01-01T00:00:00Z
 pub type TimeStamp = u64;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub struct TimeWindow {
     start: TimeStamp,
     end: TimeStamp,
