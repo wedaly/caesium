@@ -28,7 +28,7 @@ function background_server {
 }
 
 function insert {
-    $BIN/insert $1 $2 $3
+    $BIN/insert $1 $2 $3 $4
 }
 
 function query {
@@ -44,12 +44,17 @@ trap 'kill $(jobs -p)' EXIT
 ########## TEST ###########
 setup
 background_server
-insert "m1" 1 $DATA/one_to_ten.txt
-insert "m2" 1 $DATA/one_to_ten.txt
-insert "m2" 2 $DATA/ten_to_twenty.txt
+insert "m1" 30 60 $DATA/one_to_ten.txt
+insert "m2" 30 60 $DATA/one_to_ten.txt
+insert "m2" 60 90 $DATA/ten_to_twenty.txt
+insert "m3" 10 20 $DATA/one_to_ten.txt
+insert "m3" 20 30 $DATA/ten_to_twenty.txt
+insert "m3" 50 100 $DATA/ten_to_twenty.txt
 query "quantile(0.5, fetch(m1))" "m1_median.txt"
 query "quantile(0.5, fetch(m2))" "m2_median.txt"
+query "quantile(0.5, coalesce(fetch(m3)))" "m3_median.txt"
 check "m1_median.txt"
 check "m2_median.txt"
+check "m3_median.txt"
 cleanup
 echo "ALL TESTS PASSED!"

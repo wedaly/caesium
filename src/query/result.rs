@@ -1,6 +1,6 @@
 use encode::{Decodable, Encodable, EncodableError};
 use std::io::{Read, Write};
-use time::{TimeWindow, TimeStamp};
+use time::{TimeStamp, TimeWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QueryResult {

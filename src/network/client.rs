@@ -5,7 +5,7 @@ use quantile::serializable::SerializableSketch;
 use query::result::QueryResult;
 use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::time::Duration;
-use time::TimeBucket;
+use time::TimeWindow;
 
 pub struct Client {
     addr: SocketAddr,
@@ -19,12 +19,12 @@ impl Client {
     pub fn insert(
         &mut self,
         metric: String,
-        bucket: TimeBucket,
+        window: TimeWindow,
         sketch: SerializableSketch,
     ) -> Result<(), NetworkError> {
         let req = Message::InsertReq {
             metric,
-            bucket,
+            window,
             sketch,
         };
         let resp = self.request(req)?;

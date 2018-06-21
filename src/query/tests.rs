@@ -5,7 +5,7 @@ use query::result::QueryResult;
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{TimeBucket, TimeWindow, TimeStamp, SECONDS_PER_BUCKET};
+use time::{TimeStamp, TimeWindow};
 
 struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
@@ -59,13 +59,13 @@ impl<'a> DataCursor for MockDataCursor<'a> {
     }
 }
 
-fn build_data_row(bucket: TimeBucket) -> DataRow {
+fn build_data_row(window: TimeWindow) -> DataRow {
     let mut s = WritableSketch::new();
     for i in 0..100 {
         s.insert(i as u64);
     }
     DataRow {
-        window: TimeWindow::from_bucket(bucket, 1),
+        window: window,
         sketch: s.to_serializable().to_mergable(),
     }
 }
@@ -73,9 +73,9 @@ fn build_data_row(bucket: TimeBucket) -> DataRow {
 #[test]
 fn it_queries_quantile_by_metric() {
     let mut source = MockDataSource::new();
-    source.add_row("foo", build_data_row(1));
-    source.add_row("foo", build_data_row(2));
-    source.add_row("bar", build_data_row(3));
+    source.add_row("foo", build_data_row(TimeWindow::new(1, 2)));
+    source.add_row("foo", build_data_row(TimeWindow::new(2, 3)));
+    source.add_row("bar", build_data_row(TimeWindow::new(3, 4)));
     let query = "quantile(0.5, fetch(foo))";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_eq!(results.len(), 2);
@@ -84,7 +84,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r1,
         QueryResult {
-            window: TimeWindow::from_bucket(1, 1),
+            window: TimeWindow::new(1, 2),
             value: 50
         }
     );
@@ -93,7 +93,7 @@ fn it_queries_quantile_by_metric() {
     assert_eq!(
         *r2,
         QueryResult {
-            window: TimeWindow::from_bucket(2, 1),
+            window: TimeWindow::new(2, 3),
             value: 50
         }
     );
@@ -102,7 +102,7 @@ fn it_queries_quantile_by_metric() {
 #[test]
 fn it_queries_quantile_metric_not_found() {
     let mut source = MockDataSource::new();
-    source.add_row("foo", build_data_row(1));
+    source.add_row("foo", build_data_row(TimeWindow::new(1, 2)));
     let query = "quantile(0.5, fetch(bar))";
     match execute_query(&query, &mut source) {
         Err(QueryError::StorageError(StorageError::NotFound)) => {}
@@ -111,53 +111,72 @@ fn it_queries_quantile_metric_not_found() {
 }
 
 #[test]
-fn it_queries_quantile_bucket_by_hour() {
+fn it_coalesces_adjacent_time_windows() {
     let mut source = MockDataSource::new();
-    let hours = 2;
-    let buckets_per_hour = 3_600 / SECONDS_PER_BUCKET;
-    let num_buckets = hours * buckets_per_hour;
-    for i in 0..num_buckets {
-        source.add_row("foo", build_data_row(i))
-    }
-    let query = "quantile(0.5, bucket(1, fetch(foo)))";
+    source.add_row("foo", build_data_row(TimeWindow::new(0, 30)));
+    source.add_row("foo", build_data_row(TimeWindow::new(30, 60)));
+    let query = "quantile(0.5, coalesce(fetch(foo)))";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
-    assert_eq!(results.len(), hours as usize);
-    for row in results.iter() {
-        assert_eq!(row.window.duration(), 3_600);
-    }
-}
-
-#[test]
-fn it_queries_quantile_bucket_by_day() {
-    let mut source = MockDataSource::new();
-    let days = 2;
-    let buckets_per_day = 86_400 / SECONDS_PER_BUCKET;
-    let num_buckets = days * buckets_per_day;
-    for i in 0..num_buckets {
-        source.add_row("foo", build_data_row(i))
-    }
-    let query = "quantile(0.5, bucket(24, fetch(foo)))";
-    let results = execute_query(&query, &mut source).expect("Could not execute query");
-    assert_eq!(results.len(), days as usize);
-    for row in results.iter() {
-        assert_eq!(row.window.duration(), 86_400);
-    }
-}
-
-#[test]
-fn it_errors_if_bucket_applied_twice() {
-    let mut source = MockDataSource::new();
-    let hours = 2;
-    let buckets_per_hour = 3_600 / SECONDS_PER_BUCKET;
-    let num_buckets = hours * buckets_per_hour;
-    for i in 0..num_buckets {
-        source.add_row("foo", build_data_row(i))
-    }
-    let query = "quantile(0.5, bucket(1, bucket(5, fetch(foo))))";
-    match execute_query(&query, &mut source) {
-        Err(QueryError::InvalidWindowSize(s)) => {
-            assert_eq!(s, 18_000);
+    assert_eq!(results.len(), 1);
+    let r = results.first().unwrap();
+    assert_eq!(
+        *r,
+        QueryResult {
+            window: TimeWindow::new(0, 60),
+            value: 50
         }
-        _ => panic!("Expected invalid window size error!"),
-    }
+    );
+}
+
+#[test]
+fn it_coalesces_overlapping_time_windows() {
+    let mut source = MockDataSource::new();
+    source.add_row("foo", build_data_row(TimeWindow::new(30, 60)));
+    source.add_row("foo", build_data_row(TimeWindow::new(15, 35)));
+    let query = "quantile(0.5, coalesce(fetch(foo)))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), 1);
+    let r = results.first().unwrap();
+    assert_eq!(
+        *r,
+        QueryResult {
+            window: TimeWindow::new(15, 60),
+            value: 50
+        }
+    );
+}
+
+#[test]
+fn it_coalesces_nonadjacent_time_windows() {
+    let mut source = MockDataSource::new();
+    source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
+    source.add_row("foo", build_data_row(TimeWindow::new(40, 90)));
+    let query = "quantile(0.5, coalesce(fetch(foo)))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), 1);
+    let r = results.first().unwrap();
+    assert_eq!(
+        *r,
+        QueryResult {
+            window: TimeWindow::new(10, 90),
+            value: 50
+        }
+    );
+}
+
+#[test]
+fn it_coalesces_idempotent() {
+    let mut source = MockDataSource::new();
+    source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
+    source.add_row("foo", build_data_row(TimeWindow::new(40, 90)));
+    let query = "quantile(0.5, coalesce(coalesce(fetch(foo))))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    let r = results.first().unwrap();
+    assert_eq!(
+        *r,
+        QueryResult {
+            window: TimeWindow::new(10, 90),
+            value: 50
+        }
+    );
 }

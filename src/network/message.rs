@@ -2,13 +2,13 @@ use encode::{Decodable, Encodable, EncodableError};
 use quantile::serializable::SerializableSketch;
 use query::result::QueryResult;
 use std::io::{Read, Write};
-use time::TimeBucket;
+use time::TimeWindow;
 
 #[derive(Debug)]
 pub enum Message {
     InsertReq {
         metric: String,
-        bucket: TimeBucket,
+        window: TimeWindow,
         sketch: SerializableSketch,
     },
     QueryReq(String),
@@ -33,12 +33,12 @@ where
         match self {
             Message::InsertReq {
                 metric,
-                bucket,
+                window,
                 sketch,
             } => {
                 INSERT_REQ_MSG_TYPE.encode(&mut writer)?;
                 metric.encode(&mut writer)?;
-                bucket.encode(&mut writer)?;
+                window.encode(&mut writer)?;
                 sketch.encode(&mut writer)?;
             }
             Message::InsertSuccessResp => {
@@ -70,11 +70,11 @@ where
         match msg_type {
             INSERT_REQ_MSG_TYPE => {
                 let metric = String::decode(&mut reader)?;
-                let bucket = TimeBucket::decode(&mut reader)?;
+                let window = TimeWindow::decode(&mut reader)?;
                 let sketch = SerializableSketch::decode(&mut reader)?;
                 Ok(Message::InsertReq {
                     metric,
-                    bucket,
+                    window,
                     sketch,
                 })
             }
@@ -105,7 +105,7 @@ mod tests {
     fn it_encodes_and_decodes_insert_msg() {
         let msg = Message::InsertReq {
             metric: "foo".to_string(),
-            bucket: 2,
+            window: TimeWindow::new(2, 3),
             sketch: SerializableSketch::new(3, vec![Block::from_sorted_values(&vec![1, 2, 3])]),
         };
         let mut buf = Vec::new();
@@ -114,11 +114,12 @@ mod tests {
         match decoded {
             Message::InsertReq {
                 metric,
-                bucket,
+                window,
                 sketch,
             } => {
                 assert_eq!(metric, "foo");
-                assert_eq!(bucket, 2);
+                assert_eq!(window.start(), 2);
+                assert_eq!(window.end(), 3);
                 assert_eq!(sketch.to_readable().size(), 3);
             }
             _ => panic!("Decoded wrong message type"),

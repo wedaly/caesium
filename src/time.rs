@@ -4,16 +4,6 @@ use std::io::{Read, Write};
 // Unix timestamp = seconds since 1970-01-01T00:00:00Z
 pub type TimeStamp = u64;
 
-// A "bucket" is the smallest representable time range the system can store
-// Each bucket is assigned a unique ID, and each timestamp is assigned to exactly one bucket.
-pub type TimeBucket = u64;
-
-pub const SECONDS_PER_BUCKET: u64 = 30;
-
-pub fn ts_to_bucket(ts: TimeStamp, bucket_size: u64) -> TimeBucket {
-    (ts / SECONDS_PER_BUCKET) / bucket_size
-}
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct TimeWindow {
     start: TimeStamp,
@@ -23,12 +13,6 @@ pub struct TimeWindow {
 impl TimeWindow {
     pub fn new(start: TimeStamp, end: TimeStamp) -> TimeWindow {
         assert!(start <= end);
-        TimeWindow { start, end }
-    }
-
-    pub fn from_bucket(bucket: TimeBucket, bucket_size: u64) -> TimeWindow {
-        let start = bucket * bucket_size * SECONDS_PER_BUCKET;
-        let end = start + (bucket_size * SECONDS_PER_BUCKET);
         TimeWindow { start, end }
     }
 
@@ -42,10 +26,6 @@ impl TimeWindow {
 
     pub fn duration(&self) -> u64 {
         self.end - self.start
-    }
-
-    pub fn to_bucket(&self, bucket_size: u64) -> TimeBucket {
-        ts_to_bucket(self.start, bucket_size)
     }
 }
 
