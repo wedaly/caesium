@@ -16,5 +16,9 @@ uuid = { version = "0.6", features = ["v4"] }
 name = "quantile"
 harness = false
 
+[[bench]]
+name = "query"
+harness = false
+
 [profile.release]
 debug = true
