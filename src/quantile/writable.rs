@@ -3,7 +3,6 @@ use quantile::constants::{BUFCOUNT, BUFSIZE};
 use quantile::sampler::Sampler;
 use quantile::serializable::SerializableSketch;
 use rand;
-use std::cmp::max;
 use std::collections::HashMap;
 
 pub struct WritableSketch {
@@ -14,6 +13,7 @@ pub struct WritableSketch {
     lengths: [usize; BUFCOUNT],
     levels: [usize; BUFCOUNT],
     active_level: usize,
+    level_limit: usize,
 }
 
 impl WritableSketch {
@@ -26,6 +26,7 @@ impl WritableSketch {
             lengths: [0; BUFCOUNT],
             levels: [0; BUFCOUNT],
             active_level: 0,
+            level_limit: WritableSketch::calc_level_limit(0),
         }
     }
 
@@ -33,6 +34,7 @@ impl WritableSketch {
         self.current_buffer = 0;
         self.count = 0;
         self.active_level = 0;
+        self.level_limit = WritableSketch::calc_level_limit(0);
         self.sampler.reset();
         for i in 0..BUFCOUNT {
             self.lengths[i] = 0;
@@ -138,10 +140,15 @@ impl WritableSketch {
     }
 
     fn update_active_level(&mut self) {
-        let numerator = self.count as f64;
-        let denominator = (BUFSIZE * (1 << (BUFCOUNT - 2))) as f64;
-        let result = (numerator / denominator).log2().ceil() as i64;
-        self.active_level = max(0, result) as usize;
-        self.sampler.set_max_weight(1 << self.active_level);
+        if self.count > self.level_limit {
+            self.active_level += 1;
+            self.sampler.set_max_weight(1 << self.active_level);
+            self.level_limit = WritableSketch::calc_level_limit(self.active_level);
+        }
+    }
+
+    fn calc_level_limit(level: usize) -> usize {
+        let denominator = BUFSIZE * (1 << (BUFCOUNT - 2));
+        (1 << level) * denominator
     }
 }

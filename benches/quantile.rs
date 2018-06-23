@@ -90,6 +90,14 @@ fn bench_insert_many_nonempty(bench: &mut Bencher) {
     })
 }
 
+fn bench_insert_increase_active_level(bench: &mut Bencher) {
+    let mut s = WritableSketch::new();
+    let input = random_values(524289);
+    bench.iter(|| {
+        input.iter().for_each(|v| s.insert(*v));
+    })
+}
+
 fn bench_query_small_sketch(bench: &mut Bencher) {
     let mut s = build_readable_sketch(256);
     bench.iter(|| s.query(0.5))
@@ -146,6 +154,7 @@ benchmark_group!(
     bench_insert_one_nonempty,
     bench_insert_many_empty,
     bench_insert_many_nonempty,
+    bench_insert_increase_active_level,
     bench_query_small_sketch,
     bench_query_full_sketch_one_tenth,
     bench_query_full_sketch_median,
@@ -154,6 +163,6 @@ benchmark_group!(
     bench_merge_two_sketches_random_data,
     bench_writable_to_serializable,
     bench_serializable_to_bytes,
-    bench_serializable_from_bytes
+    bench_serializable_from_bytes,
 );
 benchmark_main!(benches);
