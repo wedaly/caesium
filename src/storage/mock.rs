@@ -74,4 +74,3 @@ impl<'a> DataCursor for MockDataCursor<'a> {
         Ok(None)
     }
 }
-

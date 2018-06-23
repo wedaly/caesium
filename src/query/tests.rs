@@ -1,10 +1,10 @@
-use storage::mock::MockDataSource;
 use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::execute::execute_query;
 use query::result::QueryResult;
 use storage::datasource::DataRow;
 use storage::error::StorageError;
+use storage::mock::MockDataSource;
 use time::TimeWindow;
 
 fn build_data_row(window: TimeWindow) -> DataRow {

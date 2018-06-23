@@ -4,12 +4,12 @@ extern crate caesium;
 extern crate rand;
 
 use bencher::Bencher;
-use rand::Rng;
-use caesium::storage::mock::MockDataSource;
 use caesium::quantile::writable::WritableSketch;
-use caesium::time::TimeWindow;
-use caesium::storage::datasource::DataRow;
 use caesium::query::execute::execute_query;
+use caesium::storage::datasource::DataRow;
+use caesium::storage::mock::MockDataSource;
+use caesium::time::TimeWindow;
+use rand::Rng;
 
 fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: usize) {
     let mut rng = rand::thread_rng();
@@ -20,7 +20,7 @@ fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: us
     }
     let row = DataRow {
         window: TimeWindow::new(start, end),
-        sketch: s.to_serializable().to_mergable()
+        sketch: s.to_serializable().to_mergable(),
     };
     db.add_row(metric, row);
 }
@@ -28,9 +28,7 @@ fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: us
 fn bench_quantile_query_single_row(bench: &mut Bencher) {
     let mut db = MockDataSource::new();
     insert(&mut db, "foo", 0, 30, 2048);
-    bench.iter(|| {
-        execute_query(&"quantile(0.5, fetch(foo))", &db)
-    })
+    bench.iter(|| execute_query(&"quantile(0.5, fetch(foo))", &db))
 }
 
 fn bench_quantile_query_many_rows(bench: &mut Bencher) {
@@ -40,17 +38,13 @@ fn bench_quantile_query_many_rows(bench: &mut Bencher) {
         let end = start + 30;
         insert(&mut db, "foo", start, end, 2048);
     }
-    bench.iter(|| {
-        execute_query(&"quantile(0.5, fetch(foo))", &db)
-    })
+    bench.iter(|| execute_query(&"quantile(0.5, fetch(foo))", &db))
 }
 
 fn bench_coalesce_query_single_row(bench: &mut Bencher) {
     let mut db = MockDataSource::new();
     insert(&mut db, "foo", 0, 30, 2048);
-    bench.iter(|| {
-        execute_query(&"quantile(0.5, coalesce(fetch(foo)))", &db)
-    })
+    bench.iter(|| execute_query(&"quantile(0.5, coalesce(fetch(foo)))", &db))
 }
 
 fn bench_coalesce_query_many_rows(bench: &mut Bencher) {
@@ -60,18 +54,14 @@ fn bench_coalesce_query_many_rows(bench: &mut Bencher) {
         let end = start + 30;
         insert(&mut db, "foo", start, end, 2048);
     }
-    bench.iter(|| {
-        execute_query(&"quantile(0.5, coalesce(fetch(foo)))", &db)
-    })
+    bench.iter(|| execute_query(&"quantile(0.5, coalesce(fetch(foo)))", &db))
 }
 
 fn bench_combine_query_single_row(bench: &mut Bencher) {
     let mut db = MockDataSource::new();
     insert(&mut db, "foo", 0, 30, 2048);
     insert(&mut db, "bar", 0, 30, 2048);
-    bench.iter(|| {
-        execute_query(&"quantile(0.5, combine(fetch(foo), fetch(bar)))", &db)
-    })
+    bench.iter(|| execute_query(&"quantile(0.5, combine(fetch(foo), fetch(bar)))", &db))
 }
 
 fn bench_combine_query_many_rows(bench: &mut Bencher) {
@@ -82,9 +72,7 @@ fn bench_combine_query_many_rows(bench: &mut Bencher) {
         insert(&mut db, "foo", start, end, 2048);
         insert(&mut db, "bar", start, end, 2048);
     }
-    bench.iter(|| {
-        execute_query(&"quantile(0.5, combine(fetch(foo), fetch(bar)))", &db)
-    })
+    bench.iter(|| execute_query(&"quantile(0.5, combine(fetch(foo), fetch(bar)))", &db))
 }
 
 benchmark_group!(
