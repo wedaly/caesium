@@ -5,7 +5,7 @@ use time::TimeStamp;
 
 pub struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
-    empty: Vec<DataRow>
+    empty: Vec<DataRow>,
 }
 
 impl MockDataSource {
