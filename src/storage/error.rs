@@ -3,7 +3,6 @@ use rocksdb;
 
 #[derive(Debug)]
 pub enum StorageError {
-    NotFound,
     EncodableError(EncodableError),
     DatabaseError(rocksdb::Error),
 }

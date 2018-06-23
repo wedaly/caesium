@@ -5,12 +5,14 @@ use time::TimeStamp;
 
 pub struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,
+    empty: Vec<DataRow>
 }
 
 impl MockDataSource {
     pub fn new() -> MockDataSource {
         MockDataSource {
             data: HashMap::new(),
+            empty: Vec::new(),
         }
     }
 
@@ -36,7 +38,10 @@ impl DataSource for MockDataSource {
                 let cursor = MockDataCursor::new(rows, start_ts, end_ts);
                 Ok(Box::new(cursor))
             }
-            None => Err(StorageError::NotFound),
+            None => {
+                let cursor = MockDataCursor::new(&self.empty, 0, 0);
+                Ok(Box::new(cursor))
+            }
         }
     }
 }

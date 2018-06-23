@@ -1,9 +1,7 @@
 use quantile::writable::WritableSketch;
-use query::error::QueryError;
 use query::execute::execute_query;
 use query::result::QueryResult;
 use storage::datasource::DataRow;
-use storage::error::StorageError;
 use storage::mock::MockDataSource;
 use time::TimeWindow;
 
@@ -82,10 +80,8 @@ fn it_queries_quantile_metric_not_found() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(1, 2)));
     let query = "quantile(0.5, fetch(bar))";
-    match execute_query(&query, &mut source) {
-        Err(QueryError::StorageError(StorageError::NotFound)) => {}
-        _ => panic!("Expected not found error!"),
-    }
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), 0);
 }
 
 #[test]
