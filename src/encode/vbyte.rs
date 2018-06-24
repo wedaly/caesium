@@ -1,5 +1,5 @@
+use encode::{Decodable, Encodable, EncodableError};
 use std::io::{Read, Write};
-use encode::{EncodableError, Encodable, Decodable};
 
 const BYTE_MASK: u8 = 0x7F;
 const CONTINUE_BIT: u8 = (1 << 7);

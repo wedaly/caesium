@@ -1,5 +1,5 @@
+use encode::vbyte::{vbyte_decode, vbyte_encode};
 use encode::{Decodable, Encodable, EncodableError};
-use encode::vbyte::{vbyte_encode, vbyte_decode};
 use rand;
 use std::io::{Read, Write};
 use std::slice::Iter;
