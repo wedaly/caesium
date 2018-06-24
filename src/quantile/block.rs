@@ -69,13 +69,11 @@ impl Block {
 
     pub fn compact(&mut self, overflow: &mut Block) {
         debug_assert!(overflow.len() == 0);
-        let mut sel = rand::random::<bool>();
         let n = self.sorted_values.len();
-        for idx in 0..n {
-            if sel {
-                self.sorted_values[idx / 2] = self.sorted_values[idx];
-            }
-            sel = !sel;
+        let mut idx = rand::random::<bool>() as usize;
+        while idx < n {
+            self.sorted_values[idx / 2] = self.sorted_values[idx];
+            idx += 2;
         }
         overflow
             .sorted_values
