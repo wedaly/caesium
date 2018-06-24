@@ -1,4 +1,5 @@
 use encode::{Decodable, Encodable, EncodableError};
+use encode::vbyte::{vbyte_encode, vbyte_decode};
 use rand;
 use std::io::{Read, Write};
 use std::slice::Iter;
@@ -91,7 +92,18 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        self.sorted_values.encode(writer)
+        let n = self.sorted_values.len();
+        n.encode(writer)?;
+        if n > 0 {
+            let mut x0 = self.sorted_values[0];
+            vbyte_encode(x0, writer)?;
+            for x1 in self.sorted_values[1..].iter() {
+                let delta = x1 - x0;
+                vbyte_encode(delta, writer)?;
+                x0 = *x1;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -100,9 +112,20 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<Block, EncodableError> {
-        let b = Block {
-            sorted_values: Vec::<u64>::decode(reader)?,
-        };
+        let n = usize::decode(reader)?;
+        let mut v = Vec::with_capacity(n);
+        if n > 0 {
+            let mut x0 = vbyte_decode(reader)?;
+            v.push(x0);
+            for _ in 1..n {
+                let delta = vbyte_decode(reader)?;
+                let x1 = delta + x0;
+                v.push(x1);
+                x0 = x1;
+            }
+        }
+
+        let b = Block { sorted_values: v };
         Ok(b)
     }
 }
@@ -141,7 +164,38 @@ mod tests {
     }
 
     #[test]
-    fn it_encodes_and_decodes() {
+    fn it_encodes_and_decodes_empty() {
+        let b = Block::new();
+        let mut buf = Vec::<u8>::new();
+        b.encode(&mut buf).unwrap();
+        let decoded = Block::decode(&mut &buf[..]).unwrap();
+        assert_values(&decoded, vec![]);
+    }
+
+    #[test]
+    fn it_encodes_and_decodes_single_value() {
+        let mut b = Block::new();
+        b.insert_sorted_values(&vec![42]);
+
+        let mut buf = Vec::<u8>::new();
+        b.encode(&mut buf).unwrap();
+        let decoded = Block::decode(&mut &buf[..]).unwrap();
+        assert_values(&decoded, vec![42]);
+    }
+
+    #[test]
+    fn it_encodes_and_decodes_two_values() {
+        let mut b = Block::new();
+        b.insert_sorted_values(&vec![9, 60]);
+
+        let mut buf = Vec::<u8>::new();
+        b.encode(&mut buf).unwrap();
+        let decoded = Block::decode(&mut &buf[..]).unwrap();
+        assert_values(&decoded, vec![9, 60]);
+    }
+
+    #[test]
+    fn it_encodes_and_decodes_multiple_values() {
         let mut b = Block::new();
         b.insert_sorted_values(&vec![1, 2, 3, 4]);
 

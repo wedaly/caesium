@@ -1,5 +1,6 @@
 pub mod int;
 pub mod string;
+pub mod vbyte;
 
 #[macro_use]
 pub mod vec;
