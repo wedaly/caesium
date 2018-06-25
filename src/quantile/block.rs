@@ -94,14 +94,11 @@ where
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         let n = self.sorted_values.len();
         n.encode(writer)?;
-        if n > 0 {
-            let mut x0 = self.sorted_values[0];
-            vbyte_encode(x0, writer)?;
-            for x1 in self.sorted_values[1..].iter() {
-                let delta = x1 - x0;
-                vbyte_encode(delta, writer)?;
-                x0 = *x1;
-            }
+        let mut x0 = 0;
+        for x1 in self.sorted_values.iter() {
+            let delta = x1 - x0;
+            vbyte_encode(delta, writer)?;
+            x0 = *x1;
         }
         Ok(())
     }
@@ -114,15 +111,12 @@ where
     fn decode(reader: &mut R) -> Result<Block, EncodableError> {
         let n = usize::decode(reader)?;
         let mut v = Vec::with_capacity(n);
-        if n > 0 {
-            let mut x0 = vbyte_decode(reader)?;
-            v.push(x0);
-            for _ in 1..n {
-                let delta = vbyte_decode(reader)?;
-                let x1 = delta + x0;
-                v.push(x1);
-                x0 = x1;
-            }
+        let mut x0 = 0;
+        for _ in 0..n {
+            let delta = vbyte_decode(reader)?;
+            let x1 = delta + x0;
+            v.push(x1);
+            x0 = x1;
         }
 
         let b = Block { sorted_values: v };
