@@ -10,6 +10,7 @@ pub enum QueryError {
     InvalidOutputType,
     MissingArg,
     InvalidArgType,
+    InvalidArgValue(&'static str),
     PhiOutOfRange(f64),
     InvalidWindowSize(u64),
     EncodableError(EncodableError),

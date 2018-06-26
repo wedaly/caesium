@@ -85,6 +85,66 @@ fn it_queries_quantile_metric_not_found() {
 }
 
 #[test]
+fn it_queries_quantile_group_by_hour() {
+    let mut source = MockDataSource::new();
+    source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
+    source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
+    source.add_row("foo", build_data_row(TimeWindow::new(30, 40)));
+    source.add_row("foo", build_data_row(TimeWindow::new(40, 50)));
+    source.add_row("foo", build_data_row(TimeWindow::new(4000, 4500)));
+    let query = "quantile(0.5, fetch(foo, 0, 10000, hours))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), 2);
+
+    let r1 = results.get(0).unwrap();
+    assert_eq!(
+        *r1,
+        QueryResult {
+            window: TimeWindow::new(10, 50),
+            value: 50
+        }
+    );
+
+    let r2 = results.get(1).unwrap();
+    assert_eq!(
+        *r2,
+        QueryResult {
+            window: TimeWindow::new(4000, 4500),
+            value: 50
+        }
+    );
+}
+
+#[test]
+fn it_queries_quantile_group_by_day() {
+    let mut source = MockDataSource::new();
+    source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
+    source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
+    source.add_row("foo", build_data_row(TimeWindow::new(90000, 91000)));
+    let query = "quantile(0.5, fetch(foo, 0, 100000, hours))";
+    let results = execute_query(&query, &mut source).expect("Could not execute query");
+    assert_eq!(results.len(), 2);
+
+    let r1 = results.get(0).unwrap();
+    assert_eq!(
+        *r1,
+        QueryResult {
+            window: TimeWindow::new(10, 30),
+            value: 50
+        }
+    );
+
+    let r2 = results.get(1).unwrap();
+    assert_eq!(
+        *r2,
+        QueryResult {
+            window: TimeWindow::new(90000, 91000),
+            value: 50
+        }
+    );
+}
+
+#[test]
 fn it_coalesces_adjacent_time_windows() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(0, 30)));

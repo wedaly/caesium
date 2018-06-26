@@ -1,7 +1,7 @@
 use query::error::QueryError;
 use query::ops::coalesce::CoalesceOp;
 use query::ops::combine::CombineOp;
-use query::ops::fetch::FetchOp;
+use query::ops::fetch::{FetchOp, GroupType};
 use query::ops::quantile::QuantileOp;
 use query::ops::QueryOp;
 use query::parser::ast::Expression;
@@ -40,7 +40,12 @@ fn build_fetch_op<'a>(
     let metric = get_string_arg(args, 0)?;
     let start_ts = get_optional_arg(get_int_arg, args, 1)?;
     let end_ts = get_optional_arg(get_int_arg, args, 2)?;
-    let op = FetchOp::new(metric, source, start_ts, end_ts)?;
+    let group_type_str = get_optional_arg(get_string_arg, args, 3)?;
+    let group_type = match group_type_str {
+        None => GroupType::Seconds,
+        Some(s) => GroupType::from_str(&s)?,
+    };
+    let op = FetchOp::new(metric, source, group_type, start_ts, end_ts)?;
     Ok(Box::new(op))
 }
 
