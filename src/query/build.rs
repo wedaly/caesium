@@ -1,7 +1,8 @@
 use query::error::QueryError;
 use query::ops::coalesce::CoalesceOp;
 use query::ops::combine::CombineOp;
-use query::ops::fetch::{FetchOp, GroupType};
+use query::ops::fetch::FetchOp;
+use query::ops::group::{GroupOp, GroupType};
 use query::ops::quantile::QuantileOp;
 use query::ops::QueryOp;
 use query::parser::ast::Expression;
@@ -25,38 +26,13 @@ fn map_func_to_query_op<'a>(
     source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
     match name {
-        "fetch" => build_fetch_op(args, source),
-        "quantile" => build_quantile_op(args, source),
         "coalesce" => build_coalesce_op(args, source),
         "combine" => build_combine_op(args, source),
+        "fetch" => build_fetch_op(args, source),
+        "group" => build_group_op(args, source),
+        "quantile" => build_quantile_op(args, source),
         f => Err(QueryError::UnrecognizedFunction(f.to_string())),
     }
-}
-
-fn build_fetch_op<'a>(
-    args: &[Box<Expression>],
-    source: &'a DataSource,
-) -> Result<Box<QueryOp + 'a>, QueryError> {
-    let metric = get_string_arg(args, 0)?;
-    let start_ts = get_optional_arg(get_int_arg, args, 1)?;
-    let end_ts = get_optional_arg(get_int_arg, args, 2)?;
-    let group_type_str = get_optional_arg(get_string_arg, args, 3)?;
-    let group_type = match group_type_str {
-        None => GroupType::Seconds,
-        Some(s) => GroupType::from_str(&s)?,
-    };
-    let op = FetchOp::new(metric, source, group_type, start_ts, end_ts)?;
-    Ok(Box::new(op))
-}
-
-fn build_quantile_op<'a>(
-    args: &[Box<Expression>],
-    source: &'a DataSource,
-) -> Result<Box<QueryOp + 'a>, QueryError> {
-    let phi = get_float_arg(args, 0)?;
-    let input = get_func_arg(args, 1, source)?;
-    let op = QuantileOp::new(phi, input)?;
-    Ok(Box::new(op))
 }
 
 fn build_coalesce_op<'a>(
@@ -77,6 +53,41 @@ fn build_combine_op<'a>(
         inputs.push(get_func_arg(args, i, source)?);
     }
     let op = CombineOp::new(inputs);
+    Ok(Box::new(op))
+}
+
+fn build_fetch_op<'a>(
+    args: &[Box<Expression>],
+    source: &'a DataSource,
+) -> Result<Box<QueryOp + 'a>, QueryError> {
+    let metric = get_string_arg(args, 0)?;
+    let start_ts = get_optional_arg(get_int_arg, args, 1)?;
+    let end_ts = get_optional_arg(get_int_arg, args, 2)?;
+    let op = FetchOp::new(metric, source, start_ts, end_ts)?;
+    Ok(Box::new(op))
+}
+
+fn build_group_op<'a>(
+    args: &[Box<Expression>],
+    source: &'a DataSource,
+) -> Result<Box<QueryOp + 'a>, QueryError> {
+    let group_type_str = get_optional_arg(get_string_arg, args, 0)?;
+    let group_type = match group_type_str {
+        None => GroupType::Seconds,
+        Some(s) => GroupType::from_str(&s)?,
+    };
+    let input = get_func_arg(args, 1, source)?;
+    let op = GroupOp::new(group_type, input)?;
+    Ok(Box::new(op))
+}
+
+fn build_quantile_op<'a>(
+    args: &[Box<Expression>],
+    source: &'a DataSource,
+) -> Result<Box<QueryOp + 'a>, QueryError> {
+    let phi = get_float_arg(args, 0)?;
+    let input = get_func_arg(args, 1, source)?;
+    let op = QuantileOp::new(phi, input)?;
     Ok(Box::new(op))
 }
 

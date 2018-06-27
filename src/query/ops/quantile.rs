@@ -29,10 +29,9 @@ impl<'a> QuantileOp<'a> {
 
 impl<'a> QueryOp for QuantileOp<'a> {
     fn get_next(&mut self) -> Result<OpOutput, QueryError> {
-        match self.input.get_next() {
-            Ok(OpOutput::Sketch(window, sketch)) => self.query_sketch(window, sketch),
-            Ok(OpOutput::End) => Ok(OpOutput::End),
-            Err(err) => Err(err),
+        match self.input.get_next()? {
+            OpOutput::Sketch(window, sketch) => self.query_sketch(window, sketch),
+            OpOutput::End => Ok(OpOutput::End),
             _ => Err(QueryError::InvalidInput),
         }
     }

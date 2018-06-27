@@ -63,7 +63,7 @@ fn it_queries_quantile_group_by_hour() {
     source.add_row("foo", build_data_row(TimeWindow::new(30, 40)));
     source.add_row("foo", build_data_row(TimeWindow::new(40, 50)));
     source.add_row("foo", build_data_row(TimeWindow::new(4000, 4500)));
-    let query = "quantile(0.5, fetch(foo, 0, 10000, hours))";
+    let query = "quantile(0.5, group(hours, fetch(foo, 0, 10000)))";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_rows(&results, &vec![(10, 50, 50), (4000, 4500, 50)]);
 }
@@ -73,10 +73,11 @@ fn it_queries_quantile_group_by_day() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
     source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
+    source.add_row("foo", build_data_row(TimeWindow::new(7000, 8000)));
     source.add_row("foo", build_data_row(TimeWindow::new(90000, 91000)));
-    let query = "quantile(0.5, fetch(foo, 0, 100000, hours))";
+    let query = "quantile(0.5, group(days, fetch(foo, 0, 100000)))";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
-    assert_rows(&results, &vec![(10, 30, 50), (90000, 91000, 50)]);
+    assert_rows(&results, &vec![(10, 8000, 50), (90000, 91000, 50)]);
 }
 
 #[test]
