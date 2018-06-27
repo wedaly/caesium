@@ -1,117 +1,85 @@
 use quantile::mergable::MergableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
-use std::cmp::Ordering;
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::collections::BinaryHeap;
+use std::ops::DerefMut;
 use time::TimeWindow;
 
 pub struct CombineOp<'a> {
     inputs: Vec<Box<QueryOp + 'a>>,
-    outputs: Vec<OpOutput>,
-    processed: bool,
+    state: Option<State>,
 }
 
 impl<'a> CombineOp<'a> {
     pub fn new(inputs: Vec<Box<QueryOp + 'a>>) -> CombineOp {
         CombineOp {
             inputs,
-            outputs: Vec::new(),
-            processed: false,
+            state: Some(State::initial()),
         }
-    }
-
-    fn process_inputs(&mut self) -> Result<(), QueryError> {
-        let mut combiner = Combiner::new();
-        for mut input in self.inputs.iter_mut() {
-            loop {
-                match input.get_next()? {
-                    OpOutput::Sketch(window, sketch) => {
-                        combiner.insert(window, sketch);
-                    }
-                    OpOutput::End => {
-                        break;
-                    }
-                    _ => return Err(QueryError::InvalidInput),
-                }
-            }
-        }
-        self.outputs = combiner.results();
-        self.outputs.reverse(); // because we `pop()` in reverse order
-        Ok(())
     }
 }
 
 impl<'a> QueryOp for CombineOp<'a> {
     fn get_next(&mut self) -> Result<OpOutput, QueryError> {
-        if !self.processed {
-            self.process_inputs()?;
-            self.processed = true;
-        }
-
-        match self.outputs.pop() {
-            Some(out) => Ok(out),
-            None => Ok(OpOutput::End),
-        }
-    }
-}
-
-struct Combiner {
-    heap: BinaryHeap<HeapItem>,
-}
-
-impl Combiner {
-    fn new() -> Combiner {
-        Combiner {
-            heap: BinaryHeap::new(),
-        }
-    }
-
-    fn insert(&mut self, window: TimeWindow, sketch: MergableSketch) {
-        self.heap.push(HeapItem { window, sketch })
-    }
-
-    fn results(mut self) -> Vec<OpOutput> {
-        let mut results = Vec::new();
         loop {
-            match (self.heap.pop(), self.heap.pop()) {
-                (Some(x), Some(y)) => {
-                    if x.window.end() <= y.window.start() || x.window.start() >= y.window.end() {
-                        results.push(x.to_output());
-                        self.heap.push(y);
-                    } else {
-                        let merged_start = min(x.window.start(), y.window.start());
-                        let merged_end = max(x.window.end(), y.window.end());
-                        let mut merged_sketch = x.sketch;
-                        merged_sketch.merge(&y.sketch);
-                        let merged_item = HeapItem {
-                            window: TimeWindow::new(merged_start, merged_end),
-                            sketch: merged_sketch,
-                        };
-                        self.heap.push(merged_item);
-                    }
+            let state = self.state.take().expect("Expected state to be nonempty");
+            let (next_state, action) = state.transition(&mut self.inputs)?;
+            self.state = Some(next_state);
+            match action {
+                Action::NoOutput => {
+                    continue;
                 }
-                (Some(x), None) => {
-                    results.push(x.to_output());
+                Action::OutputEnd => {
+                    return Ok(OpOutput::End);
                 }
-                (None, None) => {
-                    break;
+                Action::OutputSketch(window, sketch) => {
+                    return Ok(OpOutput::Sketch(window, sketch));
                 }
-                (None, Some(_)) => panic!("Item in heap after popping last item"),
             }
         }
-        results
     }
 }
 
 struct HeapItem {
+    input_idx: usize,
     window: TimeWindow,
     sketch: MergableSketch,
 }
 
 impl HeapItem {
-    fn to_output(self) -> OpOutput {
-        OpOutput::Sketch(self.window, self.sketch)
+    fn from_input<'a>(
+        input_idx: usize,
+        input: &'a mut QueryOp,
+    ) -> Result<Option<HeapItem>, QueryError> {
+        match input.get_next()? {
+            OpOutput::Sketch(window, sketch) => {
+                let item = HeapItem {
+                    input_idx,
+                    window,
+                    sketch,
+                };
+                Ok(Some(item))
+            }
+            OpOutput::End => Ok(None),
+            _ => return Err(QueryError::InvalidInput),
+        }
+    }
+
+    fn overlaps(&self, other: &HeapItem) -> bool {
+        self.window.overlaps(&other.window)
+    }
+
+    fn merge(self, other: HeapItem) -> HeapItem {
+        let min_start = min(self.window.start(), other.window.start());
+        let max_end = max(self.window.end(), other.window.end());
+        let mut merged_sketch = self.sketch;
+        merged_sketch.merge(&other.sketch);
+        HeapItem {
+            input_idx: self.input_idx,
+            window: TimeWindow::new(min_start, max_end),
+            sketch: merged_sketch,
+        }
     }
 }
 
@@ -136,240 +104,100 @@ impl PartialEq for HeapItem {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use quantile::writable::WritableSketch;
+enum Action {
+    NoOutput,
+    OutputEnd,
+    OutputSketch(TimeWindow, MergableSketch),
+}
 
-    #[test]
-    fn it_merges_sketches_when_combining() {
-        let mut combiner = Combiner::new();
-        let mut w1 = WritableSketch::new();
-        let mut w2 = WritableSketch::new();
-        for i in 0..10 {
-            w1.insert(i as u64);
-            w2.insert(i as u64);
+enum State {
+    Empty,
+    Selecting(BinaryHeap<HeapItem>),
+    Combining(HeapItem, BinaryHeap<HeapItem>),
+    Done,
+}
+
+impl State {
+    fn initial() -> State {
+        State::Empty
+    }
+
+    fn transition<'a>(
+        self,
+        inputs: &mut Vec<Box<QueryOp + 'a>>,
+    ) -> Result<(State, Action), QueryError> {
+        match self {
+            State::Empty => State::transition_empty(inputs),
+            State::Selecting(heap) => State::transition_selecting(inputs, heap),
+            State::Combining(item, heap) => State::transition_combining(inputs, item, heap),
+            State::Done => Ok((State::Done, Action::OutputEnd)),
         }
-        let s1 = w1.to_serializable().to_mergable();
-        let s2 = w2.to_serializable().to_mergable();
-        combiner.insert(TimeWindow::new(0, 10), s1);
-        combiner.insert(TimeWindow::new(5, 15), s2);
-        let results = combiner.results();
-        assert_eq!(results.len(), 1);
-        let sketch = match results.first() {
-            Some(OpOutput::Sketch(_, sketch)) => sketch,
-            _ => panic!("Expected sketch output"),
+    }
+
+    fn transition_empty<'a>(
+        inputs: &mut Vec<Box<QueryOp + 'a>>,
+    ) -> Result<(State, Action), QueryError> {
+        let mut heap = BinaryHeap::with_capacity(inputs.len());
+        for (input_idx, input_op) in inputs.iter_mut().enumerate() {
+            if let Some(item) = HeapItem::from_input(input_idx, input_op.deref_mut())? {
+                heap.push(item);
+            }
+        }
+        let next_state = State::Selecting(heap);
+        Ok((next_state, Action::NoOutput))
+    }
+
+    fn transition_selecting<'a>(
+        mut inputs: &mut Vec<Box<QueryOp + 'a>>,
+        mut heap: BinaryHeap<HeapItem>,
+    ) -> Result<(State, Action), QueryError> {
+        let next_item = heap.pop();
+        match next_item {
+            Some(item) => {
+                State::replace_into_heap(&mut inputs, item.input_idx, &mut heap)?;
+                Ok((State::Combining(item, heap), Action::NoOutput))
+            }
+            None => Ok((State::Done, Action::OutputEnd)),
+        }
+    }
+
+    fn transition_combining<'a>(
+        mut inputs: &mut Vec<Box<QueryOp + 'a>>,
+        stored_item: HeapItem,
+        mut heap: BinaryHeap<HeapItem>,
+    ) -> Result<(State, Action), QueryError> {
+        let next_item = heap.pop();
+        match next_item {
+            Some(item) => {
+                State::replace_into_heap(&mut inputs, item.input_idx, &mut heap)?;
+                if item.overlaps(&stored_item) {
+                    let next_state = State::Combining(stored_item.merge(item), heap);
+                    Ok((next_state, Action::NoOutput))
+                } else {
+                    let next_state = State::Combining(item, heap);
+                    let action = Action::OutputSketch(stored_item.window, stored_item.sketch);
+                    Ok((next_state, action))
+                }
+            }
+            None => {
+                let action = Action::OutputSketch(stored_item.window, stored_item.sketch);
+                Ok((State::Done, action))
+            }
+        }
+    }
+
+    fn replace_into_heap<'a>(
+        inputs: &mut Vec<Box<QueryOp + 'a>>,
+        input_idx: usize,
+        heap: &mut BinaryHeap<HeapItem>,
+    ) -> Result<(), QueryError> {
+        let replace_input = inputs
+            .get_mut(input_idx)
+            .expect("Could not retrieve input")
+            .deref_mut();
+        if let Some(item) = HeapItem::from_input(input_idx, replace_input)? {
+            heap.push(item);
         };
-        assert_eq!(sketch.count(), 20);
-    }
-
-    #[test]
-    fn it_combines_empty_inputs() {
-        let combiner = Combiner::new();
-        assert_eq!(combiner.results().len(), 0);
-    }
-
-    #[test]
-    fn it_combines_single_input() {
-        let mut combiner = Combiner::new();
-        insert_windows(&mut combiner, vec![TimeWindow::new(0, 10)]);
-        assert_windows(combiner, vec![TimeWindow::new(0, 10)]);
-    }
-
-    #[test]
-    fn it_combines_two_overlapping_inputs_first_before_second() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(5, 15)],
-        );
-        assert_windows(combiner, vec![TimeWindow::new(0, 15)]);
-    }
-
-    #[test]
-    fn it_combines_two_overlapping_inputs_second_before_first() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(5, 15), TimeWindow::new(0, 10)],
-        );
-        assert_windows(combiner, vec![TimeWindow::new(0, 15)]);
-    }
-
-    #[test]
-    fn it_combines_two_overlapping_inputs_first_contains_second() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(0, 20), TimeWindow::new(5, 10)],
-        );
-        assert_windows(combiner, vec![TimeWindow::new(0, 20)]);
-    }
-
-    #[test]
-    fn it_combines_two_overlapping_inputs_second_contains_first() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(5, 10), TimeWindow::new(0, 20)],
-        );
-        assert_windows(combiner, vec![TimeWindow::new(0, 20)]);
-    }
-
-    #[test]
-    fn it_combines_two_nonadjacent_inputs_first_before_second() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(20, 30)],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(20, 30)],
-        );
-    }
-
-    #[test]
-    fn it_combines_two_nonadjacent_inputs_first_after_second() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(20, 30), TimeWindow::new(0, 10)],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(20, 30)],
-        );
-    }
-
-    #[test]
-    fn it_combines_two_adjacent_inputs_first_before_second() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(10, 20)],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(10, 20)],
-        );
-    }
-
-    #[test]
-    fn it_combines_two_adjacent_inputs_first_after_second() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![TimeWindow::new(10, 20), TimeWindow::new(0, 10)],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(10, 20)],
-        );
-    }
-
-    #[test]
-    fn it_combines_three_inputs_non_overlapping() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![
-                TimeWindow::new(0, 10),
-                TimeWindow::new(30, 40),
-                TimeWindow::new(20, 30),
-            ],
-        );
-        assert_windows(
-            combiner,
-            vec![
-                TimeWindow::new(0, 10),
-                TimeWindow::new(20, 30),
-                TimeWindow::new(30, 40),
-            ],
-        );
-    }
-
-    #[test]
-    fn it_combines_three_inputs_first_two_overlap() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![
-                TimeWindow::new(0, 10),
-                TimeWindow::new(5, 30),
-                TimeWindow::new(40, 50),
-            ],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 30), TimeWindow::new(40, 50)],
-        );
-    }
-
-    #[test]
-    fn it_combines_three_inputs_second_two_overlap() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![
-                TimeWindow::new(0, 10),
-                TimeWindow::new(25, 40),
-                TimeWindow::new(20, 30),
-            ],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 10), TimeWindow::new(20, 40)],
-        );
-    }
-
-    #[test]
-    fn it_combines_three_inputs_all_overlap() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![
-                TimeWindow::new(0, 10),
-                TimeWindow::new(5, 15),
-                TimeWindow::new(10, 20),
-            ],
-        );
-        assert_windows(combiner, vec![TimeWindow::new(0, 20)]);
-    }
-
-    #[test]
-    fn it_combines_duplicate_windows() {
-        let mut combiner = Combiner::new();
-        insert_windows(
-            &mut combiner,
-            vec![
-                TimeWindow::new(0, 30),
-                TimeWindow::new(30, 60),
-                TimeWindow::new(0, 30),
-                TimeWindow::new(30, 60),
-            ],
-        );
-        assert_windows(
-            combiner,
-            vec![TimeWindow::new(0, 30), TimeWindow::new(30, 60)],
-        );
-    }
-
-    fn insert_windows(combiner: &mut Combiner, windows: Vec<TimeWindow>) {
-        for window in windows.iter() {
-            combiner.insert(*window, MergableSketch::empty());
-        }
-    }
-
-    fn assert_windows(combiner: Combiner, expected: Vec<TimeWindow>) {
-        let results = combiner.results();
-        let windows: Vec<TimeWindow> = results
-            .iter()
-            .filter_map(|output| match output {
-                OpOutput::Sketch(window, _) => Some(*window),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(windows, expected);
+        Ok(())
     }
 }

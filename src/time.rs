@@ -4,12 +4,6 @@ use std::io::{Read, Write};
 // Unix timestamp = seconds since 1970-01-01T00:00:00Z
 pub type TimeStamp = u64;
 
-#[derive(Debug, Copy, Clone, Ord, Eq, PartialEq, PartialOrd)]
-pub struct TimeWindow {
-    start: TimeStamp,
-    end: TimeStamp,
-}
-
 const SECONDS_PER_HOUR: u64 = 3600;
 const SECONDS_PER_DAY: u64 = SECONDS_PER_HOUR * 24;
 
@@ -19,6 +13,12 @@ pub fn hours(ts: TimeStamp) -> u64 {
 
 pub fn days(ts: TimeStamp) -> u64 {
     ts / SECONDS_PER_DAY
+}
+
+#[derive(Debug, Copy, Clone, Ord, Eq, PartialEq, PartialOrd)]
+pub struct TimeWindow {
+    start: TimeStamp,
+    end: TimeStamp,
 }
 
 impl TimeWindow {
@@ -37,6 +37,14 @@ impl TimeWindow {
 
     pub fn duration(&self) -> u64 {
         self.end - self.start
+    }
+
+    pub fn overlaps(&self, other: &TimeWindow) -> bool {
+        !self.disjoint(other)
+    }
+
+    pub fn disjoint(&self, other: &TimeWindow) -> bool {
+        self.end <= other.start || self.start >= other.end
     }
 }
 

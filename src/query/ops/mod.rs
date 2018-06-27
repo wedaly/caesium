@@ -9,6 +9,7 @@ pub enum OpOutput {
 }
 
 pub trait QueryOp {
+    // Each output MUST be returned in order by starting timestamp
     fn get_next(&mut self) -> Result<OpOutput, QueryError>;
 }
 
