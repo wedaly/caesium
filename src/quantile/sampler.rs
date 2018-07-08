@@ -44,6 +44,16 @@ impl Sampler {
             None
         }
     }
+
+    pub fn flush(&mut self) -> Option<u64> {
+        let output = if self.count >= self.sample_idx {
+            Some(self.val)
+        } else {
+            None
+        };
+        self.reset();
+        output
+    }
 }
 
 #[cfg(test)]

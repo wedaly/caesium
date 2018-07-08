@@ -33,17 +33,15 @@ impl WritableSketch {
     pub fn insert(&mut self, val: u64) {
         self.count += 1;
         if let Some(val) = self.sampler.sample(val) {
-            self.update_active_level();
-            let idx = self.choose_insert_buffer();
-            let len = self.lengths[idx];
-            debug_assert!(len < BUFSIZE);
-            self.buffers[idx][len] = val;
-            self.lengths[idx] += 1;
-            self.current_buffer = idx;
+            self.insert_sampled(val);
         }
     }
 
-    pub fn to_serializable(self) -> SerializableSketch {
+    pub fn to_serializable(mut self) -> SerializableSketch {
+        if let Some(val) = self.sampler.flush() {
+            self.insert_sampled(val);
+        }
+
         let max_level = self.levels.iter().max().unwrap_or(&0);
         let mut levels: Vec<Block> = Vec::new();
         for _ in 0..max_level + 1 {
@@ -60,6 +58,16 @@ impl WritableSketch {
         }
 
         SerializableSketch::new(self.count, levels)
+    }
+
+    fn insert_sampled(&mut self, val: u64) {
+        self.update_active_level();
+        let idx = self.choose_insert_buffer();
+        let len = self.lengths[idx];
+        debug_assert!(len < BUFSIZE);
+        self.buffers[idx][len] = val;
+        self.lengths[idx] += 1;
+        self.current_buffer = idx;
     }
 
     fn choose_insert_buffer(&mut self) -> usize {
