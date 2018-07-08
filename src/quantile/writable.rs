@@ -38,7 +38,7 @@ impl WritableSketch {
     }
 
     pub fn to_serializable(mut self) -> SerializableSketch {
-        if let Some(val) = self.sampler.flush() {
+        if let Some(val) = self.sampler.stored_val() {
             self.insert_sampled(val);
         }
 

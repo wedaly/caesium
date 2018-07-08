@@ -19,12 +19,6 @@ impl Sampler {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.count = 0;
-        self.sample_idx = 0;
-        self.max_weight = 1;
-    }
-
     pub fn set_max_weight(&mut self, max_weight: usize) {
         debug_assert!(max_weight > 0, "Max weight must be positive");
         self.max_weight = max_weight;
@@ -45,14 +39,12 @@ impl Sampler {
         }
     }
 
-    pub fn flush(&mut self) -> Option<u64> {
-        let output = if self.count >= self.sample_idx {
+    pub fn stored_val(&mut self) -> Option<u64> {
+        if self.count >= self.sample_idx {
             Some(self.val)
         } else {
             None
-        };
-        self.reset();
-        output
+        }
     }
 }
 
