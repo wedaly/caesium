@@ -136,6 +136,6 @@ impl WritableSketch {
     }
 
     fn calc_level_limit(level: usize) -> usize {
-        (1 << level) * BUFSIZE * (1 << (BUFCOUNT - 2))
+        (1 << (level + BUFCOUNT - 2)) * BUFSIZE
     }
 }
