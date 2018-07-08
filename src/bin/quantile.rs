@@ -91,19 +91,28 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
     sorted_partitions.extend_from_slice(partitions);
     sorted_partitions.sort_unstable();
 
-    let mut tmp = WritableSketch::new();
+    let mut tmp = None;
     let mut result = MergableSketch::empty();
     let mut b = 0;
     data.iter().enumerate().for_each(|(idx, val)| {
+        let mut writable = match tmp.take() {
+            None => WritableSketch::new(),
+            Some(w) => w,
+        };
+
+        writable.insert(*val);
+
         let cutoff = match sorted_partitions.get(b) {
             None => data.len() - 1,
             Some(&x) => x,
         };
-        tmp.insert(*val);
+
         if idx >= cutoff {
-            result.merge(&tmp.to_serializable().to_mergable());
-            tmp.reset();
+            let mergable = writable.to_serializable().to_mergable();
+            result.merge(&mergable);
             b += 1;
+        } else {
+            tmp = Some(writable);
         }
     });
     result.to_readable()

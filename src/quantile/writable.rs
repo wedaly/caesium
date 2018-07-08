@@ -30,18 +30,6 @@ impl WritableSketch {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.current_buffer = 0;
-        self.count = 0;
-        self.active_level = 0;
-        self.level_limit = WritableSketch::calc_level_limit(0);
-        self.sampler.reset();
-        for i in 0..BUFCOUNT {
-            self.lengths[i] = 0;
-            self.levels[i] = 0;
-        }
-    }
-
     pub fn insert(&mut self, val: u64) {
         self.count += 1;
         if let Some(val) = self.sampler.sample(val) {
@@ -55,7 +43,7 @@ impl WritableSketch {
         }
     }
 
-    pub fn to_serializable(&self) -> SerializableSketch {
+    pub fn to_serializable(self) -> SerializableSketch {
         let max_level = self.levels.iter().max().unwrap_or(&0);
         let mut levels: Vec<Block> = Vec::new();
         for _ in 0..max_level + 1 {
@@ -148,7 +136,6 @@ impl WritableSketch {
     }
 
     fn calc_level_limit(level: usize) -> usize {
-        let denominator = BUFSIZE * (1 << (BUFCOUNT - 2));
-        (1 << level) * denominator
+        (1 << level) * BUFSIZE * (1 << (BUFCOUNT - 2))
     }
 }

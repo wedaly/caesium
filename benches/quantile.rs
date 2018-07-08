@@ -130,11 +130,6 @@ fn bench_merge_two_sketches_random_data(bench: &mut Bencher) {
     bench.iter(|| m1.merge(&m2))
 }
 
-fn bench_writable_to_serializable(bench: &mut Bencher) {
-    let s = build_writable_sketch(4096, false);
-    bench.iter(|| s.to_serializable())
-}
-
 fn bench_serializable_to_bytes(bench: &mut Bencher) {
     let s = build_serializable_sketch(4096);
     let mut writer = Vec::new();
@@ -161,7 +156,6 @@ benchmark_group!(
     bench_query_full_sketch_nine_tenths,
     bench_merge_two_sketches_sequential_data,
     bench_merge_two_sketches_random_data,
-    bench_writable_to_serializable,
     bench_serializable_to_bytes,
     bench_serializable_from_bytes,
 );
