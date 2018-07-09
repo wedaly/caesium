@@ -1,5 +1,6 @@
 use rand::{weak_rng, Rng, XorShiftRng};
 
+#[derive(Clone)]
 pub struct Sampler {
     count: usize,
     sample_idx: usize,

@@ -59,9 +59,9 @@ fn build_serializable_sketch(n: usize) -> SerializableSketch {
 }
 
 fn bench_insert_one_empty(bench: &mut Bencher) {
-    let mut s = WritableSketch::new();
+    let s = WritableSketch::new();
     bench.iter(|| {
-        s.insert(1);
+        s.clone().insert(1);
     })
 }
 
@@ -69,15 +69,16 @@ fn bench_insert_one_nonempty(bench: &mut Bencher) {
     let mut s = WritableSketch::new();
     insert_sequential(&mut s, 4096);
     bench.iter(|| {
-        s.insert(1);
+        s.clone().insert(1);
     })
 }
 
 fn bench_insert_many_empty(bench: &mut Bencher) {
-    let mut s = WritableSketch::new();
+    let s = WritableSketch::new();
     let input = random_values(2048);
     bench.iter(|| {
-        input.iter().for_each(|v| s.insert(*v));
+        let mut sc = s.clone();
+        input.iter().for_each(|v| sc.insert(*v));
     })
 }
 
@@ -86,15 +87,17 @@ fn bench_insert_many_nonempty(bench: &mut Bencher) {
     insert_sequential(&mut s, 4096);
     let input = random_values(2048);
     bench.iter(|| {
-        input.iter().for_each(|v| s.insert(*v));
+        let mut sc = s.clone();
+        input.iter().for_each(|v| sc.insert(*v));
     })
 }
 
 fn bench_insert_increase_active_level(bench: &mut Bencher) {
-    let mut s = WritableSketch::new();
+    let s = WritableSketch::new();
     let input = random_values(524289);
     bench.iter(|| {
-        input.iter().for_each(|v| s.insert(*v));
+        let mut sc = s.clone();
+        input.iter().for_each(|v| sc.insert(*v));
     })
 }
 

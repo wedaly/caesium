@@ -5,6 +5,7 @@ use quantile::serializable::SerializableSketch;
 use rand;
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct WritableSketch {
     sampler: Sampler,
     current_buffer: usize,
