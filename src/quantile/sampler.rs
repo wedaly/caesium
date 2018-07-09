@@ -38,14 +38,6 @@ impl Sampler {
             None
         }
     }
-
-    pub fn stored_val(&mut self) -> Option<u64> {
-        if self.count >= self.sample_idx {
-            Some(self.val)
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]

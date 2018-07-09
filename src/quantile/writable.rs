@@ -37,11 +37,7 @@ impl WritableSketch {
         }
     }
 
-    pub fn to_serializable(mut self) -> SerializableSketch {
-        if let Some(val) = self.sampler.stored_val() {
-            self.insert_sampled(val);
-        }
-
+    pub fn to_serializable(self) -> SerializableSketch {
         let max_level = self.levels.iter().max().unwrap_or(&0);
         let mut levels: Vec<Block> = Vec::new();
         for _ in 0..max_level + 1 {
