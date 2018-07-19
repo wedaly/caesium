@@ -26,14 +26,17 @@ impl Sampler {
     }
 
     pub fn sample(&mut self, val: u64) -> Option<u64> {
-        self.sample_weighted(val, 1)
+        // Special case for small max_weight values to improve performance
+        if self.max_weight == 1 {
+            Some(val)
+        } else {
+            self.sample_weighted(val, 1)
+        }
     }
 
     pub fn sample_weighted(&mut self, val: u64, weight: usize) -> Option<u64> {
-        assert!(
-            weight <= self.max_weight,
-            "Item weight must be <= group size"
-        );
+        assert!(weight <= self.max_weight);
+        assert!(weight > 0);
         let combined_weight = self.weight + weight;
         if combined_weight <= self.max_weight {
             self.reservoir_sample_no_overflow(val, weight, combined_weight)
@@ -57,11 +60,7 @@ impl Sampler {
         combined_weight: usize,
     ) -> Option<u64> {
         // Replace stored item with probability = weight / combined_weight
-        let cutoff = if combined_weight > 0 {
-            usize::max_value() / combined_weight * weight
-        } else {
-            usize::max_value() * weight
-        };
+        let cutoff = usize::max_value() / combined_weight * weight;
         let r = self.generator.next_u64() as usize;
         if r <= cutoff {
             self.val = val;

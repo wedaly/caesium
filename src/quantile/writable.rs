@@ -100,11 +100,13 @@ impl WritableSketch {
         // Absorb victim sampler stored value into survivor sampler
         let sampler_val = victim.sampler.stored_value();
         let sampler_weight = victim.sampler.stored_weight();
-        if let Some(v) = survivor
-            .sampler
-            .sample_weighted(sampler_val, sampler_weight)
-        {
-            values.push(v);
+        if sampler_weight > 0 {
+            if let Some(v) = survivor
+                .sampler
+                .sample_weighted(sampler_val, sampler_weight)
+            {
+                values.push(v);
+            }
         }
 
         // Absorb victim levels < survivor level into survivor sampler
