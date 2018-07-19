@@ -151,7 +151,7 @@ impl WritableSketch {
     }
 
     pub fn to_readable(self) -> ReadableSketch {
-        let mut data = Vec::with_capacity(self.size);
+        let mut data = Vec::with_capacity(self.size + 1);
         if self.sampler.stored_weight() > 0 {
             data.push(WeightedValue::new(
                 self.sampler.stored_weight(),
