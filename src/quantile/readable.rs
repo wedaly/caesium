@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 #[derive(Copy, Clone, Debug)]
 pub struct WeightedValue {
     weight: usize,
@@ -20,6 +18,7 @@ pub struct ReadableSketch {
 
 impl ReadableSketch {
     pub fn new(count: usize, data: Vec<WeightedValue>) -> ReadableSketch {
+        debug_assert!(count == data.iter().map(|v| v.weight).sum());
         ReadableSketch { count, data }
     }
 
@@ -59,11 +58,7 @@ impl ReadableSketch {
             }
         }
 
-        // We might "find" an element past the end of the array
-        // if `count` is greater than the sum of all weights.
-        // When this happens, simply return the last item instead.
-        let idx = min(left, data.len() - 1);
-        data[idx].value
+        data[left].value
     }
 
     fn partition(
@@ -150,25 +145,6 @@ mod tests {
             }
         }
         assert_queries(data);
-    }
-
-    #[test]
-    fn it_queries_target_idx_gt_weight_sum() {
-        let data = vec![
-            WeightedValue::new(1, 1),
-            WeightedValue::new(1, 2),
-            WeightedValue::new(1, 3),
-            WeightedValue::new(1, 4),
-            WeightedValue::new(1, 5),
-            WeightedValue::new(1, 6),
-            WeightedValue::new(1, 8),
-            WeightedValue::new(1, 9),
-            WeightedValue::new(1, 10),
-        ];
-        let count = 50; // greater than total weight
-        let mut s = ReadableSketch::new(count, data);
-        let result = s.query(0.9999999).expect("Could not query sketch");
-        assert_eq!(result, 10);
     }
 
     fn assert_queries(data: Vec<WeightedValue>) {

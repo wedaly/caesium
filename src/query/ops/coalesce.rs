@@ -35,7 +35,7 @@ impl<'a> CoalesceOp<'a> {
                     tmp = Some(merged.merge(sketch));
                 }
                 Ok(OpOutput::End) => {
-                    if merged.count() > 0 {
+                    if merged.size() > 0 {
                         let window = TimeWindow::new(min_start, max_end);
                         return Ok(OpOutput::Sketch(window, merged));
                     } else {

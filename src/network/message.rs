@@ -119,7 +119,7 @@ mod tests {
                 assert_eq!(metric, "foo");
                 assert_eq!(window.start(), 2);
                 assert_eq!(window.end(), 3);
-                assert_eq!(sketch.count(), 0);
+                assert_eq!(sketch.size(), 0);
             }
             _ => panic!("Decoded wrong message type"),
         }
