@@ -170,6 +170,10 @@ impl WritableSketch {
         self.count
     }
 
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
     fn get_compactor_id(&self, level: u8) -> usize {
         self.compactor_map[level as usize].expect("Could not retrieve compactor ID")
     }

@@ -1,5 +1,7 @@
 extern crate caesium;
 extern crate rand;
+use caesium::encode::Encodable;
+use caesium::perf::Timer;
 use caesium::quantile::error::ErrorCalculator;
 use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::writable::WritableSketch;
@@ -38,12 +40,15 @@ struct Args {
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
     let data = read_data_file(&args.data_path)?;
+    let mut timer = Timer::new();
     let partitions = choose_merge_partitions(data.len(), args.num_merges);
 
-    let mut sketch = build_sketch(&data, &partitions[..]);
+    let sketch = build_sketch(&data, &partitions[..], &mut timer);
+    summarize_time(&timer);
     summarize_size(&sketch);
     let calc = ErrorCalculator::new(&data);
-    summarize_error(&calc, &mut sketch);
+    let mut readable = sketch.to_readable();
+    summarize_error(&calc, &mut readable);
 
     Ok(())
 }
@@ -83,7 +88,7 @@ fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
     candidates.iter().take(num_merges).map(|x| *x).collect()
 }
 
-fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
+fn build_sketch(data: &[u64], partitions: &[usize], timer: &mut Timer) -> WritableSketch {
     debug_assert!(partitions.len() <= data.len());
     debug_assert!(partitions.iter().all(|p| *p < data.len()));
     let mut sorted_partitions = Vec::with_capacity(partitions.len());
@@ -93,6 +98,8 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
     let mut tmp = None;
     let mut result = None;
     let mut b = 0;
+
+    timer.start();
     data.iter().enumerate().for_each(|(idx, val)| {
         let mut writable = match tmp.take() {
             None => WritableSketch::new(),
@@ -116,15 +123,25 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
             tmp = Some(writable);
         }
     });
+    timer.stop();
 
     match result {
-        None => ReadableSketch::new(0, vec![]),
-        Some(r) => r.to_readable(),
+        None => WritableSketch::new(),
+        Some(s) => s,
     }
 }
 
-fn summarize_size(sketch: &ReadableSketch) {
-    println!("size={}", sketch.size());
+fn summarize_time(timer: &Timer) {
+    let d = timer.duration().expect("Could not retrieve timer duration");
+    let ms = (d.as_secs() * 1_000) + (d.subsec_nanos() / 1_000_000) as u64;
+    println!("total insert/merge time (ms) = {}", ms);
+}
+
+fn summarize_size(sketch: &WritableSketch) {
+    let mut buf = Vec::new();
+    sketch.encode(&mut buf).expect("Could not encode sketch");
+    println!("encoded size (bytes) = {}", buf.len());
+    println!("num stored values = {}", sketch.size());
 }
 
 fn summarize_error(calc: &ErrorCalculator, sketch: &mut ReadableSketch) {

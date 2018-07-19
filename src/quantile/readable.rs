@@ -165,7 +165,7 @@ mod tests {
             WeightedValue::new(1, 9),
             WeightedValue::new(1, 10),
         ];
-        let count = 50;  // greater than total weight
+        let count = 50; // greater than total weight
         let mut s = ReadableSketch::new(count, data);
         let result = s.query(0.9999999).expect("Could not query sketch");
         assert_eq!(result, 10);
