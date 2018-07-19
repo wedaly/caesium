@@ -6,14 +6,11 @@ use storage::mock::MockDataSource;
 use time::{TimeStamp, TimeWindow};
 
 fn build_data_row(window: TimeWindow) -> DataRow {
-    let mut s = WritableSketch::new();
+    let mut sketch = WritableSketch::new();
     for i in 0..100 {
-        s.insert(i as u64);
+        sketch.insert(i as u64);
     }
-    DataRow {
-        window: window,
-        sketch: s.to_serializable().to_mergable(),
-    }
+    DataRow { window, sketch }
 }
 
 fn assert_rows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp, u64)>) {

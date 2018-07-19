@@ -1,5 +1,4 @@
 use quantile::error::ErrorCalculator;
-use quantile::mergable::MergableSketch;
 use quantile::readable::ReadableSketch;
 use quantile::writable::WritableSketch;
 use rand;
@@ -65,10 +64,9 @@ fn it_handles_large_input_with_duplicates() {
 fn it_merges_two_sketches_without_increasing_error() {
     let n = MEDIUM_SIZE * 2;
     let input = random_distinct_values(n);
-    let s1 = build_mergable_sketch(&input[..n / 2]);
-    let mut s2 = build_mergable_sketch(&input[n / 2..n]);
-    s2.merge(&s1);
-    let mut result = s2.to_readable();
+    let s1 = build_writable_sketch(&input[..n / 2]);
+    let s2 = build_writable_sketch(&input[n / 2..n]);
+    let mut result = s2.merge(s1).to_readable();
     check_error_bound(&mut result, &input);
 }
 
@@ -77,12 +75,12 @@ fn it_merges_many_sketches_without_increasing_error() {
     let sketch_size = MEDIUM_SIZE;
     let num_sketches = 30;
     let input = random_distinct_values(sketch_size * num_sketches);
-    let mut s = build_mergable_sketch(&input[..sketch_size]);
+    let mut s = build_writable_sketch(&input[..sketch_size]);
     for i in 1..num_sketches {
         let start = i * sketch_size;
         let end = start + sketch_size;
-        let new_sketch = build_mergable_sketch(&input[start..end]);
-        s.merge(&new_sketch);
+        let new_sketch = build_writable_sketch(&input[start..end]);
+        s = s.merge(new_sketch);
     }
     let mut result = s.to_readable();
     check_error_bound(&mut result, &input);
@@ -121,12 +119,7 @@ fn random_duplicate_values(n: usize) -> Vec<u64> {
 
 fn build_readable_sketch(input: &[u64]) -> ReadableSketch {
     let s = build_writable_sketch(input);
-    s.to_serializable().to_readable()
-}
-
-fn build_mergable_sketch(input: &[u64]) -> MergableSketch {
-    let s = build_writable_sketch(input);
-    s.to_serializable().to_mergable()
+    s.to_readable()
 }
 
 fn build_writable_sketch(input: &[u64]) -> WritableSketch {

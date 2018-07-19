@@ -1,7 +1,7 @@
 use encode::{Decodable, Encodable};
 use network::error::NetworkError;
 use network::message::Message;
-use quantile::serializable::SerializableSketch;
+use quantile::writable::WritableSketch;
 use query::execute::execute_query;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -85,7 +85,7 @@ fn process_request(req: Message, db: &MetricStore) -> Message {
 fn process_insert(
     metric: &str,
     window: TimeWindow,
-    sketch: SerializableSketch,
+    sketch: WritableSketch,
     db: &MetricStore,
 ) -> Message {
     match db.insert(metric, window, sketch) {

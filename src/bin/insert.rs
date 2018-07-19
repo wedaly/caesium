@@ -2,7 +2,6 @@ extern crate caesium;
 
 use caesium::network::client::Client;
 use caesium::network::error::NetworkError;
-use caesium::quantile::serializable::SerializableSketch;
 use caesium::quantile::writable::WritableSketch;
 use caesium::time::{TimeStamp, TimeWindow};
 use std::env;
@@ -51,7 +50,7 @@ fn parse_args() -> Result<Args, Error> {
     })
 }
 
-fn build_sketch(path: &str) -> Result<SerializableSketch, Error> {
+fn build_sketch(path: &str) -> Result<WritableSketch, Error> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut sketch = WritableSketch::new();
@@ -64,7 +63,7 @@ fn build_sketch(path: &str) -> Result<SerializableSketch, Error> {
                 .ok()
         })
         .for_each(|val| sketch.insert(val));
-    Ok(sketch.to_serializable())
+    Ok(sketch)
 }
 
 #[derive(Debug)]

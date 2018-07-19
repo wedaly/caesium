@@ -1,10 +1,10 @@
-use quantile::mergable::MergableSketch;
+use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use time::TimeWindow;
 
 pub enum OpOutput {
     End,
-    Sketch(TimeWindow, MergableSketch),
+    Sketch(TimeWindow, WritableSketch),
     Quantile(TimeWindow, Option<u64>),
 }
 

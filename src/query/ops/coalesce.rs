@@ -1,4 +1,4 @@
-use quantile::mergable::MergableSketch;
+use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::cmp::{max, min};
@@ -20,14 +20,19 @@ impl<'a> CoalesceOp<'a> {
     fn coalesce_inputs(&mut self) -> Result<OpOutput, QueryError> {
         let mut min_start = u64::max_value();
         let mut max_end = 0;
-        let mut merged = MergableSketch::empty();
+        let mut tmp = None;
 
         loop {
+            let merged = match tmp.take() {
+                None => WritableSketch::new(),
+                Some(s) => s,
+            };
+
             match self.input.get_next() {
                 Ok(OpOutput::Sketch(window, sketch)) => {
                     min_start = min(min_start, window.start());
                     max_end = max(max_end, window.end());
-                    merged.merge(&sketch);
+                    tmp = Some(merged.merge(sketch));
                 }
                 Ok(OpOutput::End) => {
                     if merged.count() > 0 {

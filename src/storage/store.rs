@@ -1,6 +1,5 @@
 use encode::{Decodable, Encodable};
-use quantile::mergable::MergableSketch;
-use quantile::serializable::SerializableSketch;
+use quantile::writable::WritableSketch;
 use rocksdb;
 use std::cmp::{max, min};
 use std::io::Cursor;
@@ -31,7 +30,7 @@ impl MetricStore {
         &self,
         metric: &str,
         window: TimeWindow,
-        sketch: SerializableSketch,
+        sketch: WritableSketch,
     ) -> Result<(), StorageError> {
         let key = MetricStore::key(metric, window.start())?;
         let val = MetricStore::val(window, sketch)?;
@@ -47,13 +46,13 @@ impl MetricStore {
     ) -> Option<Vec<u8>> {
         let mut window_start = TimeStamp::max_value();
         let mut window_end = 0;
-        let mut merged = MergableSketch::empty();
+        let mut merged = WritableSketch::new();
         if let Some(bytes) = existing_val {
-            MetricStore::safe_merge(&mut merged, &mut window_start, &mut window_end, bytes);
+            merged = MetricStore::safe_merge(merged, &mut window_start, &mut window_end, bytes);
         }
 
         for mut bytes in operands {
-            MetricStore::safe_merge(&mut merged, &mut window_start, &mut window_end, bytes);
+            merged = MetricStore::safe_merge(merged, &mut window_start, &mut window_end, bytes);
         }
 
         let window = TimeWindow::new(window_start, window_end);
@@ -61,11 +60,11 @@ impl MetricStore {
     }
 
     fn safe_merge(
-        dst: &mut MergableSketch,
+        dst: WritableSketch,
         start: &mut TimeStamp,
         end: &mut TimeStamp,
         bytes: &[u8],
-    ) {
+    ) -> WritableSketch {
         let mut cursor = Cursor::new(bytes);
         let (merged_start, merged_end) = match TimeWindow::decode(&mut cursor) {
             Ok(w) => {
@@ -75,29 +74,29 @@ impl MetricStore {
             }
             Err(err) => {
                 error!("Could not deserialize time window from DB value: {:?}", err);
-                return;
+                return dst;
             }
         };
 
-        match SerializableSketch::decode(&mut cursor) {
+        match WritableSketch::decode(&mut cursor) {
             Ok(s) => {
                 *start = merged_start;
                 *end = merged_end;
-                dst.merge(&s.to_mergable());
+                dst.merge(s)
             }
             Err(err) => {
                 error!("Could not deserialize sketch from DB value: {:?}", err);
-                return;
+                dst
             }
-        };
+        }
     }
 
-    fn safe_encode(window: TimeWindow, sketch: MergableSketch) -> Option<Vec<u8>> {
+    fn safe_encode(window: TimeWindow, sketch: WritableSketch) -> Option<Vec<u8>> {
         let mut buf = Vec::new();
         if let Err(err) = window.encode(&mut buf) {
             error!("Could not encode time window to DB value: {:?}", err);
             None
-        } else if let Err(err) = sketch.to_serializable().encode(&mut buf) {
+        } else if let Err(err) = sketch.encode(&mut buf) {
             error!("Could not encode sketch to DB value: {:?}", err);
             None
         } else {
@@ -112,7 +111,7 @@ impl MetricStore {
         Ok(buf)
     }
 
-    fn val(window: TimeWindow, sketch: SerializableSketch) -> Result<Vec<u8>, StorageError> {
+    fn val(window: TimeWindow, sketch: WritableSketch) -> Result<Vec<u8>, StorageError> {
         let mut buf = Vec::new();
         window.encode(&mut buf)?;
         sketch.encode(&mut buf)?;
@@ -169,7 +168,7 @@ impl DataCursor for MetricCursor {
                     );
                     let mut val_reader = Cursor::new(val);
                     let window = TimeWindow::decode(&mut val_reader)?;
-                    let sketch = SerializableSketch::decode(&mut val_reader)?.to_mergable();
+                    let sketch = WritableSketch::decode(&mut val_reader)?;
                     Some(DataRow { window, sketch })
                 }
             }
@@ -377,15 +376,15 @@ mod tests {
         assert!(result.is_ok())
     }
 
-    fn build_sketch_with_values(values: Vec<u64>) -> SerializableSketch {
+    fn build_sketch_with_values(values: Vec<u64>) -> WritableSketch {
         let mut s = WritableSketch::new();
         for &i in values.iter() {
             s.insert(i);
         }
-        s.to_serializable()
+        s
     }
 
-    fn build_sketch() -> SerializableSketch {
+    fn build_sketch() -> WritableSketch {
         let vals: Vec<u64> = (0..100).map(|i| i as u64).collect();
         build_sketch_with_values(vals)
     }

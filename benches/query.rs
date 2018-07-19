@@ -3,23 +3,20 @@ extern crate bencher;
 extern crate caesium;
 
 use bencher::Bencher;
-use caesium::quantile::block::Block;
-use caesium::quantile::serializable::SerializableSketch;
+use caesium::quantile::writable::WritableSketch;
 use caesium::query::execute::execute_query;
 use caesium::storage::datasource::DataRow;
 use caesium::storage::mock::MockDataSource;
 use caesium::time::TimeWindow;
 
 fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: usize) {
-    let mut data = Vec::with_capacity(count);
+    let mut sketch = WritableSketch::new();
     for v in 0..count {
-        data.push(v as u64);
+        sketch.insert(v as u64);
     }
-    let block = Block::from_sorted_values(&data);
-    let sketch = SerializableSketch::new(count, vec![block]);
     let row = DataRow {
         window: TimeWindow::new(start, end),
-        sketch: sketch.to_mergable(),
+        sketch,
     };
     db.add_row(metric, row);
 }

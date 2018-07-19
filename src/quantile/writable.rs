@@ -1,146 +1,426 @@
-use quantile::block::Block;
-use quantile::constants::{BUFCOUNT, BUFSIZE};
+use encode::{Decodable, Encodable, EncodableError};
+use quantile::compactor::Compactor;
+use quantile::readable::{ReadableSketch, WeightedValue};
 use quantile::sampler::Sampler;
-use quantile::serializable::SerializableSketch;
-use rand;
-use std::collections::HashMap;
+use slab::Slab;
+use std::fmt;
+use std::io::{Read, Write};
+use std::ops::RangeInclusive;
 
-#[derive(Clone)]
+const LEVEL_LIMIT: u8 = 64;
+const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
+    1024, 683, 456, 304, 203, 135, 90, 60, 40, 27, 18, 12, 8, 6, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2,
+];
+
 pub struct WritableSketch {
-    sampler: Sampler,
-    current_buffer: usize,
+    level: u8,
     count: usize,
-    buffers: [[u64; BUFSIZE]; BUFCOUNT],
-    lengths: [usize; BUFCOUNT],
-    levels: [usize; BUFCOUNT],
-    active_level: usize,
-    level_limit: usize,
+    size: usize,
+    capacity: usize,
+    sampler: Sampler,
+    compactor_count: usize,
+    compactor_slab: Slab<Compactor>,
+    compactor_map: [Option<usize>; LEVEL_LIMIT as usize], // Level to compactor slab ID
 }
 
 impl WritableSketch {
     pub fn new() -> WritableSketch {
+        let mut compactor_slab = Slab::new();
+        let mut compactor_map = [None; LEVEL_LIMIT as usize];
+        let cid = compactor_slab.insert(Compactor::new());
+        compactor_map[0] = Some(cid);
         WritableSketch {
-            sampler: Sampler::new(),
-            current_buffer: 0,
+            level: 0,
             count: 0,
-            buffers: [[0; BUFSIZE]; BUFCOUNT],
-            lengths: [0; BUFCOUNT],
-            levels: [0; BUFCOUNT],
-            active_level: 0,
-            level_limit: WritableSketch::calc_level_limit(0),
+            size: 0,
+            capacity: CAPACITY_AT_DEPTH[0],
+            sampler: Sampler::new(),
+            compactor_count: 1,
+            compactor_slab,
+            compactor_map,
         }
+    }
+
+    fn from_parts(
+        level: u8,
+        count: usize,
+        sampler: Sampler,
+        mut compactors: Vec<Compactor>,
+    ) -> WritableSketch {
+        assert!(level as usize + compactors.len() < LEVEL_LIMIT as usize);
+        assert!(!compactors.is_empty());
+        let compactor_count = compactors.len();
+        let mut compactor_slab = Slab::new();
+        let mut compactor_map = [None; LEVEL_LIMIT as usize];
+        for (idx, c) in compactors.drain(..).enumerate() {
+            let compactor_level = level + idx as u8;
+            let cid = compactor_slab.insert(c);
+            compactor_map[compactor_level as usize] = Some(cid);
+        }
+
+        let mut s = WritableSketch {
+            level,
+            count,
+            size: 0,
+            capacity: 0,
+            sampler: sampler,
+            compactor_count,
+            compactor_slab,
+            compactor_map,
+        };
+        s.size = s.calculate_size();
+        s.capacity = s.calculate_capacity();
+        s
     }
 
     pub fn insert(&mut self, val: u64) {
         self.count += 1;
         if let Some(val) = self.sampler.sample(val) {
-            self.insert_sampled(val);
-        }
-    }
-
-    pub fn to_serializable(self) -> SerializableSketch {
-        let max_level = self.levels.iter().max().unwrap_or(&0);
-        let mut levels: Vec<Block> = Vec::new();
-        for _ in 0..max_level + 1 {
-            levels.push(Block::new())
-        }
-
-        for idx in 0..BUFCOUNT {
-            let len = self.lengths[idx];
-            let level = self.levels[idx];
-            levels
-                .get_mut(level)
-                .expect("Could not retrieve level")
-                .insert_unsorted_values(&self.buffers[idx][..len]);
-        }
-
-        SerializableSketch::new(self.count, levels)
-    }
-
-    fn insert_sampled(&mut self, val: u64) {
-        self.update_active_level();
-        let idx = self.choose_insert_buffer();
-        let len = self.lengths[idx];
-        debug_assert!(len < BUFSIZE);
-        self.buffers[idx][len] = val;
-        self.lengths[idx] += 1;
-        self.current_buffer = idx;
-    }
-
-    fn choose_insert_buffer(&mut self) -> usize {
-        if self.lengths[self.current_buffer] < BUFSIZE {
-            self.current_buffer
-        } else if let Some(idx) = self.find_empty_buffer() {
-            idx
-        } else {
-            self.merge_two_buffers()
-        }
-    }
-
-    fn merge_two_buffers(&mut self) -> usize {
-        if let Some((b1, b2)) = self.find_buffers_to_merge() {
-            self.compact_and_return_empty(b1, b2)
-        } else {
-            panic!("Could not find two buffers to merge!");
-        }
-    }
-
-    fn compact_and_return_empty(&mut self, b1: usize, b2: usize) -> usize {
-        debug_assert!(self.lengths[b1] == BUFSIZE);
-        debug_assert!(self.lengths[b2] == BUFSIZE);
-
-        let mut tmp = [0; BUFSIZE * 2];
-        tmp[..BUFSIZE].copy_from_slice(&self.buffers[b1][..]);
-        tmp[BUFSIZE..BUFSIZE * 2].copy_from_slice(&self.buffers[b2][..]);
-        tmp.sort_unstable();
-
-        // Write surviving values to b2
-        let mut sel = rand::random::<bool>();
-        let mut idx = 0;
-        for &val in tmp.iter() {
-            if sel {
-                self.buffers[b2][idx] = val;
-                idx += 1;
+            {
+                let level = self.level;
+                let first_compactor = self.get_mut_compactor(level);
+                first_compactor.insert(val);
             }
-            sel = !sel;
+            self.size += 1;
+            self.compress()
         }
-        self.levels[b2] += 1;
-
-        // Empty and return b1
-        self.lengths[b1] = 0;
-        self.levels[b1] = self.active_level;
-        b1
     }
 
-    fn find_empty_buffer(&self) -> Option<usize> {
-        self.lengths.iter().position(|&len| len == 0)
-    }
+    pub fn merge(self, other: WritableSketch) -> WritableSketch {
+        let (mut survivor, mut victim) = if self.level > other.level {
+            (self, other)
+        } else {
+            (other, self)
+        };
 
-    fn find_buffers_to_merge(&self) -> Option<(usize, usize)> {
-        debug_assert!(self.lengths.iter().all(|&len| len == BUFSIZE));
-        let mut level_map = HashMap::with_capacity(BUFCOUNT);
-        let mut best_match = None;
-        for (b1, level) in self.levels.iter().enumerate() {
-            if let Some(b2) = level_map.insert(level, b1) {
-                best_match = match best_match {
-                    None => Some((level, b1, b2)),
-                    Some((old_level, _, _)) if level < old_level => Some((level, b1, b2)),
-                    Some(current_best) => Some(current_best),
+        let mut values = Vec::new();
+
+        // Absorb victim sampler stored value into survivor sampler
+        let sampler_val = victim.sampler.stored_value();
+        let sampler_weight = victim.sampler.stored_weight();
+        if let Some(v) = survivor
+            .sampler
+            .sample_weighted(sampler_val, sampler_weight)
+        {
+            values.push(v);
+        }
+
+        // Absorb victim levels < survivor level into survivor sampler
+        for level in victim.level..survivor.level {
+            let weight = 1 << level;
+            for val in victim.get_compactor(level).iter_values() {
+                if let Some(v) = survivor.sampler.sample_weighted(*val, weight) {
+                    values.push(v);
                 }
             }
         }
-        best_match.map(|(_, b1, b2)| (b1, b2))
+
+        // Insert sampled values into survivor's first level
+        {
+            let first_level = survivor.level;
+            let first_compactor = survivor.get_mut_compactor(first_level);
+            values.sort_unstable();
+            first_compactor.insert_sorted(&values);
+        }
+
+        // Absorb victim levels > survivor level into survivor compactors
+        let num_to_add = if victim.top_level() > survivor.top_level() {
+            victim.top_level() - survivor.top_level()
+        } else {
+            0
+        };
+        for _ in 0..num_to_add {
+            survivor.add_compactor();
+        }
+        for level in survivor.level..=victim.top_level() {
+            let mut victim_compactor = victim.get_mut_compactor(level);
+            let mut survivor_compactor = survivor.get_mut_compactor(level);
+            survivor_compactor.insert_from_other(&mut victim_compactor);
+        }
+
+        // Inserted values may have exceeded capacity, so compress
+        survivor.count += victim.count;
+        survivor.size = survivor.calculate_size();
+        survivor.compress();
+
+        survivor
     }
 
-    fn update_active_level(&mut self) {
-        if self.count > self.level_limit {
-            self.active_level += 1;
-            self.sampler.set_max_weight(1 << self.active_level);
-            self.level_limit = WritableSketch::calc_level_limit(self.active_level);
+    pub fn to_readable(self) -> ReadableSketch {
+        let mut data = Vec::with_capacity(self.size);
+        for level in self.compactor_level_range() {
+            let c = self.get_compactor(level);
+            for value in c.iter_values() {
+                data.push(WeightedValue::new(level, *value));
+            }
+        }
+        ReadableSketch::new(self.count, data)
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
+    fn get_compactor_id(&self, level: u8) -> usize {
+        self.compactor_map[level as usize].expect("Could not retrieve compactor ID")
+    }
+
+    fn get_compactor(&self, level: u8) -> &Compactor {
+        let cid = self.get_compactor_id(level);
+        self.compactor_slab
+            .get(cid)
+            .expect("Could not retrieve compactor")
+    }
+
+    fn get_mut_compactor(&mut self, level: u8) -> &mut Compactor {
+        let cid = self.get_compactor_id(level);
+        self.compactor_slab
+            .get_mut(cid)
+            .expect("Could not retrieve compactor")
+    }
+
+    fn top_level(&self) -> u8 {
+        debug_assert!(self.level as usize + self.compactor_count < LEVEL_LIMIT as usize);
+        self.level + self.compactor_count as u8 - 1
+    }
+
+    fn compactor_level_range(&self) -> RangeInclusive<u8> {
+        RangeInclusive::new(self.level, self.top_level())
+    }
+
+    fn calculate_size(&self) -> usize {
+        self.compactor_level_range()
+            .map(|level| {
+                let c = self.get_compactor(level);
+                c.size()
+            })
+            .sum()
+    }
+
+    fn calculate_capacity(&self) -> usize {
+        self.compactor_level_range()
+            .map(|level| self.capacity_at_level(level))
+            .sum()
+    }
+
+    fn capacity_at_level(&self, level: u8) -> usize {
+        debug_assert!(level <= self.top_level());
+        let depth = self.top_level() - level;
+        debug_assert!(depth < 64);
+        CAPACITY_AT_DEPTH[depth as usize]
+    }
+
+    fn add_compactor(&mut self) {
+        let new_level = self.top_level() + 1;
+        assert!(new_level < LEVEL_LIMIT as u8);
+        let compactor = Compactor::new();
+        let cid = self.compactor_slab.insert(compactor);
+        self.compactor_map[new_level as usize] = Some(cid);
+        self.compactor_count += 1;
+        self.capacity = self.calculate_capacity();
+    }
+
+    fn compress(&mut self) {
+        let mut overflow = Vec::new();
+        while self.size > self.capacity {
+            // Compact first level with size > capacity, and insert surviving values into next level
+            for level in self.compactor_level_range() {
+                let capacity = self.capacity_at_level(level);
+                let c = self.get_mut_compactor(level);
+                if overflow.len() > 0 {
+                    c.insert_sorted(&overflow);
+                    overflow.clear();
+                    break;
+                }
+
+                if c.size() > capacity {
+                    c.compact(&mut overflow);
+                }
+            }
+
+            // Add a new level for surviving values if necessary
+            if overflow.len() > 0 {
+                self.add_compactor();
+                let level = self.top_level();
+                let c = self.get_mut_compactor(level);
+                c.insert_sorted(&overflow);
+            }
+
+            self.size = self.calculate_size();
+            self.capacity = self.calculate_capacity();
+        }
+
+        // Absorb any empty compactors with capacity == 2 into the sampler
+        for level in self.compactor_level_range() {
+            let capacity = self.capacity_at_level(level);
+            let size = self.get_compactor(level).size();
+            if capacity == 2 && size == 0 {
+                self.level += 1;
+                self.sampler.set_max_weight(1 << level);
+                let cid = self.compactor_map[level as usize]
+                    .take()
+                    .expect("Could not find compactor ID to remove");
+                self.compactor_slab.remove(cid);
+                self.size = self.calculate_size();
+            } else {
+                break;
+            }
+        }
+    }
+}
+
+impl fmt::Debug for WritableSketch {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "WritableSketch {{\n\tcount: {},\n\tlevel: {}\n}}",
+            self.level, self.count
+        )
+    }
+}
+
+impl Clone for WritableSketch {
+    fn clone(&self) -> Self {
+        let mut compactor_slab = Slab::new();
+        let mut compactor_map = [None; LEVEL_LIMIT as usize];
+        for level in self.compactor_level_range() {
+            let compactor = self.get_compactor(level);
+            let cid = compactor_slab.insert(compactor.clone());
+            compactor_map[level as usize] = Some(cid);
+        }
+
+        WritableSketch {
+            level: self.level,
+            count: self.count,
+            size: self.size,
+            capacity: self.capacity,
+            sampler: self.sampler.clone(),
+            compactor_count: self.compactor_count,
+            compactor_slab,
+            compactor_map,
+        }
+    }
+}
+
+impl<W> Encodable<W> for WritableSketch
+where
+    W: Write,
+{
+    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        self.level.encode(writer)?;
+        self.count.encode(writer)?;
+        self.sampler.encode(writer)?;
+        self.compactor_count.encode(writer)?;
+        for level in self.compactor_level_range() {
+            let c = self.get_compactor(level);
+            c.encode(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl<R> Decodable<WritableSketch, R> for WritableSketch
+where
+    R: Read,
+{
+    fn decode(reader: &mut R) -> Result<WritableSketch, EncodableError> {
+        let level = u8::decode(reader)?;
+        let count = usize::decode(reader)?;
+        let sampler = Sampler::decode(reader)?;
+        let num_compactors = usize::decode(reader)?;
+
+        if level as usize + num_compactors >= LEVEL_LIMIT as usize {
+            return Err(EncodableError::FormatError("Level value too large"));
+        }
+
+        if num_compactors < 1 {
+            return Err(EncodableError::FormatError(
+                "Must have at least one compactor",
+            ));
+        }
+
+        let mut compactors = Vec::new();
+        for _ in 0..num_compactors {
+            let c = Compactor::decode(reader)?;
+            compactors.push(c);
+        }
+        let s = WritableSketch::from_parts(level, count, sampler, compactors);
+        Ok(s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_sketches_quantiles_no_compression() {
+        let mut s = WritableSketch::new();
+        for i in 0..100 {
+            s.insert(i as u64);
+        }
+        let median = s.to_readable().query(0.5).expect("Could not query median");
+        assert_eq!(median, 50);
+    }
+
+    #[test]
+    fn it_merges_quantiles_no_compression() {
+        let mut s1 = WritableSketch::new();
+        let mut s2 = WritableSketch::new();
+        for i in 0..100 {
+            s1.insert(i as u64);
+            s2.insert(i as u64);
+        }
+        let merged = s1.merge(s2);
+        let median = merged
+            .to_readable()
+            .query(0.5)
+            .expect("Could not query median");
+        assert_eq!(median, 50);
+    }
+
+    #[test]
+    fn it_inserts_without_exceeding_capacity() {
+        let mut s = WritableSketch::new();
+        let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
+        for i in 0..n {
+            s.insert(i as u64);
+            assert!(s.calculate_size() <= s.calculate_capacity());
         }
     }
 
-    fn calc_level_limit(level: usize) -> usize {
-        (1 << (level + BUFCOUNT - 2)) * BUFSIZE
+    #[test]
+    fn it_merges_without_exceeding_capacity() {
+        let mut s1 = WritableSketch::new();
+        let mut s2 = WritableSketch::new();
+        let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
+        for i in 0..n {
+            s1.insert(i as u64);
+            s2.insert(i as u64);
+        }
+        let merged = s1.merge(s2);
+        assert!(merged.calculate_size() <= merged.calculate_capacity());
+    }
+
+    #[test]
+    fn it_encodes_and_decodes() {
+        let mut s = WritableSketch::new();
+        let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
+        for i in 0..n {
+            s.insert(i as u64);
+        }
+        let mut buf = Vec::<u8>::new();
+        s.encode(&mut buf).expect("Could not encode sketch");
+        let decoded = WritableSketch::decode(&mut &buf[..]).expect("Could not decode sketch");
+        assert_eq!(s.level, decoded.level);
+        assert_eq!(s.count, decoded.count);
+        assert_eq!(s.capacity, decoded.capacity);
+
+        let original_compactors: Vec<usize> = s.compactor_map.iter().filter_map(|v| *v).collect();
+        let decoded_compactors: Vec<usize> =
+            decoded.compactor_map.iter().filter_map(|v| *v).collect();
+        assert_eq!(original_compactors, decoded_compactors);
     }
 }

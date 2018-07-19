@@ -5,9 +5,7 @@ extern crate rand;
 
 use bencher::Bencher;
 use caesium::encode::{Decodable, Encodable};
-use caesium::quantile::mergable::MergableSketch;
 use caesium::quantile::readable::ReadableSketch;
-use caesium::quantile::serializable::SerializableSketch;
 use caesium::quantile::writable::WritableSketch;
 use rand::Rng;
 
@@ -43,19 +41,9 @@ fn build_writable_sketch(n: usize, randomize: bool) -> WritableSketch {
     s
 }
 
-fn build_mergable_sketch(n: usize, randomize: bool) -> MergableSketch {
-    let s = build_writable_sketch(n, randomize);
-    s.to_serializable().to_mergable()
-}
-
 fn build_readable_sketch(n: usize) -> ReadableSketch {
     let s = build_writable_sketch(n, true);
-    s.to_serializable().to_readable()
-}
-
-fn build_serializable_sketch(n: usize) -> SerializableSketch {
-    let s = build_writable_sketch(n, true);
-    s.to_serializable()
+    s.to_readable()
 }
 
 fn bench_insert_one_empty(bench: &mut Bencher) {
@@ -92,15 +80,6 @@ fn bench_insert_many_nonempty(bench: &mut Bencher) {
     })
 }
 
-fn bench_insert_increase_active_level(bench: &mut Bencher) {
-    let s = WritableSketch::new();
-    let input = random_values(524289);
-    bench.iter(|| {
-        let mut sc = s.clone();
-        input.iter().for_each(|v| sc.insert(*v));
-    })
-}
-
 fn bench_query_small_sketch(bench: &mut Bencher) {
     let mut s = build_readable_sketch(256);
     bench.iter(|| s.query(0.5))
@@ -122,28 +101,36 @@ fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
 }
 
 fn bench_merge_two_sketches_sequential_data(bench: &mut Bencher) {
-    let mut m1 = build_mergable_sketch(4096, false);
-    let m2 = build_mergable_sketch(4096, false);
-    bench.iter(|| m1.merge(&m2))
+    let m1 = build_writable_sketch(4096, false);
+    let m2 = build_writable_sketch(4096, false);
+    bench.iter(|| {
+        let m1_clone = m1.clone();
+        let m2_clone = m2.clone();
+        m1_clone.merge(m2_clone)
+    })
 }
 
 fn bench_merge_two_sketches_random_data(bench: &mut Bencher) {
-    let mut m1 = build_mergable_sketch(4096, true);
-    let m2 = build_mergable_sketch(4096, true);
-    bench.iter(|| m1.merge(&m2))
+    let m1 = build_writable_sketch(4096, true);
+    let m2 = build_writable_sketch(4096, true);
+    bench.iter(|| {
+        let m1_clone = m1.clone();
+        let m2_clone = m2.clone();
+        m1_clone.merge(m2_clone)
+    })
 }
 
-fn bench_serializable_to_bytes(bench: &mut Bencher) {
-    let s = build_serializable_sketch(4096);
+fn bench_encode_to_bytes(bench: &mut Bencher) {
+    let s = build_writable_sketch(4096, true);
     let mut writer = Vec::new();
     bench.iter(|| s.encode(&mut writer))
 }
 
-fn bench_serializable_from_bytes(bench: &mut Bencher) {
-    let s = build_serializable_sketch(4096);
+fn bench_decode_from_bytes(bench: &mut Bencher) {
+    let s = build_writable_sketch(4096, true);
     let mut v: Vec<u8> = Vec::new();
     s.encode(&mut v).unwrap();
-    bench.iter(|| SerializableSketch::decode(&mut &v[..]).unwrap())
+    bench.iter(|| WritableSketch::decode(&mut &v[..]).unwrap())
 }
 
 benchmark_group!(
@@ -152,14 +139,13 @@ benchmark_group!(
     bench_insert_one_nonempty,
     bench_insert_many_empty,
     bench_insert_many_nonempty,
-    bench_insert_increase_active_level,
     bench_query_small_sketch,
     bench_query_full_sketch_one_tenth,
     bench_query_full_sketch_median,
     bench_query_full_sketch_nine_tenths,
     bench_merge_two_sketches_sequential_data,
     bench_merge_two_sketches_random_data,
-    bench_serializable_to_bytes,
-    bench_serializable_from_bytes,
+    bench_encode_to_bytes,
+    bench_decode_from_bytes,
 );
 benchmark_main!(benches);

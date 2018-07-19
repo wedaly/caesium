@@ -1,11 +1,11 @@
-use quantile::mergable::MergableSketch;
+use quantile::writable::WritableSketch;
 use storage::error::StorageError;
 use time::{TimeStamp, TimeWindow};
 
 #[derive(Clone)]
 pub struct DataRow {
     pub window: TimeWindow,
-    pub sketch: MergableSketch,
+    pub sketch: WritableSketch,
 }
 
 pub trait DataCursor {

@@ -1,4 +1,4 @@
-use quantile::mergable::MergableSketch;
+use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::cmp::{max, min};
@@ -77,12 +77,12 @@ impl GroupType {
 enum Action {
     NoOutput,
     OutputEnd,
-    OutputSketch(TimeWindow, MergableSketch),
+    OutputSketch(TimeWindow, WritableSketch),
 }
 
 enum State {
     Empty,
-    Merging(GroupId, TimeWindow, MergableSketch),
+    Merging(GroupId, TimeWindow, WritableSketch),
     Done,
 }
 
@@ -123,7 +123,7 @@ impl State {
     fn transition_merging<'a>(
         prev_group_id: GroupId,
         prev_window: TimeWindow,
-        prev_sketch: MergableSketch,
+        prev_sketch: WritableSketch,
         group_type: GroupType,
         input: &'a mut QueryOp,
     ) -> Result<(State, Action), QueryError> {
@@ -132,14 +132,14 @@ impl State {
                 let action = Action::OutputSketch(prev_window, prev_sketch);
                 Ok((State::Done, action))
             }
-            OpOutput::Sketch(window, mut sketch) => {
+            OpOutput::Sketch(window, sketch) => {
                 let next_group_id = group_type.calculate_group_id(window);
                 if next_group_id == prev_group_id {
                     let min_start = min(window.start(), prev_window.start());
                     let max_end = max(window.end(), prev_window.end());
                     let merged_window = TimeWindow::new(min_start, max_end);
-                    sketch.merge(&prev_sketch);
-                    let next_state = State::Merging(next_group_id, merged_window, sketch);
+                    let next_state =
+                        State::Merging(next_group_id, merged_window, sketch.merge(prev_sketch));
                     Ok((next_state, Action::NoOutput))
                 } else {
                     let next_state = State::Merging(next_group_id, window, sketch);

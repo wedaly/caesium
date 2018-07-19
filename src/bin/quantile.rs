@@ -1,7 +1,6 @@
 extern crate caesium;
 extern crate rand;
 use caesium::quantile::error::ErrorCalculator;
-use caesium::quantile::mergable::MergableSketch;
 use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::writable::WritableSketch;
 use rand::Rng;
@@ -92,7 +91,7 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
     sorted_partitions.sort_unstable();
 
     let mut tmp = None;
-    let mut result = MergableSketch::empty();
+    let mut result = None;
     let mut b = 0;
     data.iter().enumerate().for_each(|(idx, val)| {
         let mut writable = match tmp.take() {
@@ -108,14 +107,20 @@ fn build_sketch(data: &[u64], partitions: &[usize]) -> ReadableSketch {
         };
 
         if idx >= cutoff {
-            let mergable = writable.to_serializable().to_mergable();
-            result.merge(&mergable);
+            result = match result.take() {
+                None => Some(writable),
+                Some(r) => Some(r.merge(writable)),
+            };
             b += 1;
         } else {
             tmp = Some(writable);
         }
     });
-    result.to_readable()
+
+    match result {
+        None => ReadableSketch::new(0, vec![]),
+        Some(r) => r.to_readable(),
+    }
 }
 
 fn summarize_size(sketch: &ReadableSketch) {

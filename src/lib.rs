@@ -2,6 +2,7 @@
 extern crate log;
 extern crate rand;
 extern crate rocksdb;
+extern crate slab;
 extern crate tokio;
 extern crate uuid;
 

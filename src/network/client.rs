@@ -1,7 +1,7 @@
 use encode::{Decodable, Encodable};
 use network::error::NetworkError;
 use network::message::Message;
-use quantile::serializable::SerializableSketch;
+use quantile::writable::WritableSketch;
 use query::result::QueryResult;
 use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::time::Duration;
@@ -20,7 +20,7 @@ impl Client {
         &mut self,
         metric: String,
         window: TimeWindow,
-        sketch: SerializableSketch,
+        sketch: WritableSketch,
     ) -> Result<(), NetworkError> {
         let req = Message::InsertReq {
             metric,

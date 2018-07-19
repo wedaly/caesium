@@ -1,18 +1,16 @@
-use quantile::block::Block;
-
-#[derive(Copy, Clone)]
-struct WeightedValue {
+#[derive(Copy, Clone, Debug)]
+pub struct WeightedValue {
     level: u8,
     value: u64,
 }
 
 impl WeightedValue {
-    fn new(level: u8, value: u64) -> WeightedValue {
+    pub fn new(level: u8, value: u64) -> WeightedValue {
         debug_assert!(level < 64);
         WeightedValue { level, value }
     }
 
-    fn weight(&self) -> usize {
+    pub fn weight(&self) -> usize {
         1 << self.level
     }
 }
@@ -23,20 +21,8 @@ pub struct ReadableSketch {
 }
 
 impl ReadableSketch {
-    pub fn new(count: usize, levels: Vec<Block>) -> ReadableSketch {
-        assert!(levels.len() < 64); // maximum weight is 2^64
-        ReadableSketch {
-            count: count,
-            data: levels
-                .iter()
-                .enumerate()
-                .flat_map(|(level, block)| {
-                    block
-                        .iter_sorted_values()
-                        .map(move |v| WeightedValue::new(level as u8, *v))
-                })
-                .collect(),
-        }
+    pub fn new(count: usize, data: Vec<WeightedValue>) -> ReadableSketch {
+        ReadableSketch { count, data }
     }
 
     pub fn size(&self) -> usize {
@@ -113,83 +99,75 @@ mod tests {
 
     #[test]
     fn it_queries_empty() {
-        let mut s = ReadableSketch::new(0, Vec::new());
+        let mut s = ReadableSketch::new(0, vec![]);
         assert_eq!(s.query(0.5), None);
     }
 
     #[test]
     fn it_queries_sorted() {
-        let data: Vec<u64> = (0..100).map(|v| v as u64).collect();
-        let levels = vec![Block::from_sorted_values(&data)];
-        assert_queries(levels);
+        let data: Vec<WeightedValue> = (0..100).map(|v| WeightedValue::new(0, v as u64)).collect();
+        assert_queries(data);
     }
 
     #[test]
     fn it_queries_unsorted() {
-        let mut data: Vec<u64> = (0..100).map(|v| v as u64).collect();
+        let mut data: Vec<WeightedValue> =
+            (0..100).map(|v| WeightedValue::new(0, v as u64)).collect();
         let mut rng = rand::thread_rng();
         rng.shuffle(&mut data);
-        let levels = vec![Block::from_unsorted_values(&data)];
-        assert_queries(levels);
+        assert_queries(data);
     }
 
     #[test]
     fn it_queries_duplicates() {
-        let data: Vec<u64> = (0..100).map(|_| 1 as u64).collect();
-        let levels = vec![Block::from_sorted_values(&data)];
-        assert_queries(levels);
+        let data: Vec<WeightedValue> = (0..100).map(|_| WeightedValue::new(0, 1)).collect();
+        assert_queries(data);
     }
 
     #[test]
     fn it_queries_weighted_small() {
-        let levels = vec![
-            Block::from_sorted_values(&vec![2, 4, 6, 7]), // weight = 1
-            Block::from_sorted_values(&vec![1, 3, 5]),    // weight = 2
+        let data = vec![
+            WeightedValue::new(0, 2),
+            WeightedValue::new(0, 4),
+            WeightedValue::new(0, 6),
+            WeightedValue::new(0, 7),
+            WeightedValue::new(1, 1),
+            WeightedValue::new(1, 3),
+            WeightedValue::new(1, 5),
         ];
-        assert_queries(levels);
+        assert_queries(data);
     }
 
     #[test]
     fn it_queries_weighted_large() {
-        let levels: Vec<Block> = (0..4)
-            .map(|level| {
-                let values: Vec<u64> = (0..64).map(|v| v * level as u64).collect();
-                Block::from_sorted_values(&values)
-            })
-            .collect();
-        assert_queries(levels);
+        let mut data = Vec::new();
+        for level in 0..4 {
+            for value in 0..64 {
+                data.push(WeightedValue::new(level as u8, value as u64));
+            }
+        }
+        assert_queries(data);
     }
 
-    fn assert_queries(levels: Vec<Block>) {
-        let count = levels
-            .iter()
-            .enumerate()
-            .map(|(level, values)| {
-                let weight = 1 << level;
-                values.len() * weight
-            })
-            .sum();
-        let mut s = ReadableSketch::new(count, levels.to_vec());
+    fn assert_queries(data: Vec<WeightedValue>) {
+        let count = data.iter().map(|v| v.weight()).sum();
+        let mut s = ReadableSketch::new(count, data.clone());
         for p in 1..100 {
             let phi = p as f64 / 100.0;
-            let expected = calculate_exact(&levels, phi);
+            let expected = calculate_exact(&data, phi);
             let actual = s.query(phi);
             println!("phi={}, expected={:?}, actual={:?}", phi, expected, actual);
             assert_eq!(actual, expected);
         }
     }
 
-    fn calculate_exact(levels: &[Block], phi: f64) -> Option<u64> {
-        let mut values: Vec<u64> = levels
-            .iter()
-            .enumerate()
-            .flat_map(move |(level, block)| {
-                let weight = 1 << level;
-                block
-                    .iter_sorted_values()
-                    .flat_map(move |v| (0..weight).map(move |_| *v))
-            })
-            .collect();
+    fn calculate_exact(data: &[WeightedValue], phi: f64) -> Option<u64> {
+        let mut values = Vec::new();
+        for v in data {
+            for _ in 0..v.weight() {
+                values.push(v.value);
+            }
+        }
         values.sort_unstable();
         if values.len() > 0 {
             let k = (values.len() as f64 * phi) as usize;

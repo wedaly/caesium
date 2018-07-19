@@ -1,4 +1,4 @@
-use quantile::mergable::MergableSketch;
+use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use time::TimeWindow;
@@ -20,7 +20,7 @@ impl<'a> QuantileOp<'a> {
     fn query_sketch(
         &self,
         window: TimeWindow,
-        sketch: MergableSketch,
+        sketch: WritableSketch,
     ) -> Result<OpOutput, QueryError> {
         let quantile = sketch.to_readable().query(self.phi);
         Ok(OpOutput::Quantile(window, quantile))

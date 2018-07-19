@@ -1,5 +1,5 @@
 use encode::{Decodable, Encodable, EncodableError};
-use quantile::serializable::SerializableSketch;
+use quantile::writable::WritableSketch;
 use query::result::QueryResult;
 use std::io::{Read, Write};
 use time::TimeWindow;
@@ -9,7 +9,7 @@ pub enum Message {
     InsertReq {
         metric: String,
         window: TimeWindow,
-        sketch: SerializableSketch,
+        sketch: WritableSketch,
     },
     QueryReq(String),
     InsertSuccessResp,
@@ -71,7 +71,7 @@ where
             INSERT_REQ_MSG_TYPE => {
                 let metric = String::decode(&mut reader)?;
                 let window = TimeWindow::decode(&mut reader)?;
-                let sketch = SerializableSketch::decode(&mut reader)?;
+                let sketch = WritableSketch::decode(&mut reader)?;
                 Ok(Message::InsertReq {
                     metric,
                     window,
@@ -99,14 +99,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quantile::block::Block;
 
     #[test]
     fn it_encodes_and_decodes_insert_msg() {
         let msg = Message::InsertReq {
             metric: "foo".to_string(),
             window: TimeWindow::new(2, 3),
-            sketch: SerializableSketch::new(3, vec![Block::from_sorted_values(&vec![1, 2, 3])]),
+            sketch: WritableSketch::new(),
         };
         let mut buf = Vec::new();
         msg.encode(&mut buf).expect("Could not encode insert msg");
@@ -120,7 +119,7 @@ mod tests {
                 assert_eq!(metric, "foo");
                 assert_eq!(window.start(), 2);
                 assert_eq!(window.end(), 3);
-                assert_eq!(sketch.to_readable().size(), 3);
+                assert_eq!(sketch.count(), 0);
             }
             _ => panic!("Decoded wrong message type"),
         }

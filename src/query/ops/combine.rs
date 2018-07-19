@@ -1,4 +1,4 @@
-use quantile::mergable::MergableSketch;
+use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::cmp::{max, min, Ordering};
@@ -44,7 +44,7 @@ impl<'a> QueryOp for CombineOp<'a> {
 struct HeapItem {
     input_idx: usize,
     window: TimeWindow,
-    sketch: MergableSketch,
+    sketch: WritableSketch,
 }
 
 impl HeapItem {
@@ -73,12 +73,10 @@ impl HeapItem {
     fn merge(self, other: HeapItem) -> HeapItem {
         let min_start = min(self.window.start(), other.window.start());
         let max_end = max(self.window.end(), other.window.end());
-        let mut merged_sketch = self.sketch;
-        merged_sketch.merge(&other.sketch);
         HeapItem {
             input_idx: self.input_idx,
             window: TimeWindow::new(min_start, max_end),
-            sketch: merged_sketch,
+            sketch: self.sketch.merge(other.sketch),
         }
     }
 }
@@ -107,7 +105,7 @@ impl PartialEq for HeapItem {
 enum Action {
     NoOutput,
     OutputEnd,
-    OutputSketch(TimeWindow, MergableSketch),
+    OutputSketch(TimeWindow, WritableSketch),
 }
 
 enum State {
