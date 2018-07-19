@@ -1,17 +1,15 @@
+use std::cmp::min;
+
 #[derive(Copy, Clone, Debug)]
 pub struct WeightedValue {
-    level: u8,
+    weight: usize,
     value: u64,
 }
 
 impl WeightedValue {
-    pub fn new(level: u8, value: u64) -> WeightedValue {
-        debug_assert!(level < 64);
-        WeightedValue { level, value }
-    }
-
-    pub fn weight(&self) -> usize {
-        1 << self.level
+    pub fn new(weight: usize, value: u64) -> WeightedValue {
+        debug_assert!(weight > 0);
+        WeightedValue { weight, value }
     }
 }
 
@@ -50,17 +48,22 @@ impl ReadableSketch {
             let left_to_pivot_weight =
                 ReadableSketch::partition(&mut data, &mut pivot_idx, left, right);
             let weight_to_pivot = left_weight + left_to_pivot_weight;
-            if weight_to_pivot <= k && k < weight_to_pivot + data[pivot_idx].weight() {
+            if weight_to_pivot <= k && k < weight_to_pivot + data[pivot_idx].weight {
                 return data[pivot_idx].value;
             } else if k < weight_to_pivot {
                 right = pivot_idx;
             } else {
-                let new_weight: usize = data[left..pivot_idx + 1].iter().map(|v| v.weight()).sum();
+                let new_weight: usize = data[left..pivot_idx + 1].iter().map(|v| v.weight).sum();
                 left_weight += new_weight;
                 left = pivot_idx + 1;
             }
         }
-        data[left].value
+
+        // We might "find" an element past the end of the array
+        // if `count` is greater than the sum of all weights.
+        // When this happens, simply return the last item instead.
+        let idx = min(left, data.len() - 1);
+        data[idx].value
     }
 
     fn partition(
@@ -75,7 +78,7 @@ impl ReadableSketch {
         *pivot_idx = left;
         for j in left..right - 1 {
             if data[j].value < pivot_val {
-                weight += data[j].weight();
+                weight += data[j].weight;
                 ReadableSketch::swap(data, *pivot_idx, j);
                 *pivot_idx += 1;
             }
@@ -105,14 +108,14 @@ mod tests {
 
     #[test]
     fn it_queries_sorted() {
-        let data: Vec<WeightedValue> = (0..100).map(|v| WeightedValue::new(0, v as u64)).collect();
+        let data: Vec<WeightedValue> = (0..100).map(|v| WeightedValue::new(1, v as u64)).collect();
         assert_queries(data);
     }
 
     #[test]
     fn it_queries_unsorted() {
         let mut data: Vec<WeightedValue> =
-            (0..100).map(|v| WeightedValue::new(0, v as u64)).collect();
+            (0..100).map(|v| WeightedValue::new(1, v as u64)).collect();
         let mut rng = rand::thread_rng();
         rng.shuffle(&mut data);
         assert_queries(data);
@@ -120,20 +123,20 @@ mod tests {
 
     #[test]
     fn it_queries_duplicates() {
-        let data: Vec<WeightedValue> = (0..100).map(|_| WeightedValue::new(0, 1)).collect();
+        let data: Vec<WeightedValue> = (0..100).map(|_| WeightedValue::new(1, 1)).collect();
         assert_queries(data);
     }
 
     #[test]
     fn it_queries_weighted_small() {
         let data = vec![
-            WeightedValue::new(0, 2),
-            WeightedValue::new(0, 4),
-            WeightedValue::new(0, 6),
-            WeightedValue::new(0, 7),
-            WeightedValue::new(1, 1),
-            WeightedValue::new(1, 3),
-            WeightedValue::new(1, 5),
+            WeightedValue::new(1, 2),
+            WeightedValue::new(1, 4),
+            WeightedValue::new(1, 6),
+            WeightedValue::new(1, 7),
+            WeightedValue::new(2, 1),
+            WeightedValue::new(2, 3),
+            WeightedValue::new(2, 5),
         ];
         assert_queries(data);
     }
@@ -143,14 +146,33 @@ mod tests {
         let mut data = Vec::new();
         for level in 0..4 {
             for value in 0..64 {
-                data.push(WeightedValue::new(level as u8, value as u64));
+                data.push(WeightedValue::new(1 << level, value as u64));
             }
         }
         assert_queries(data);
     }
 
+    #[test]
+    fn it_queries_target_idx_gt_weight_sum() {
+        let data = vec![
+            WeightedValue::new(1, 1),
+            WeightedValue::new(1, 2),
+            WeightedValue::new(1, 3),
+            WeightedValue::new(1, 4),
+            WeightedValue::new(1, 5),
+            WeightedValue::new(1, 6),
+            WeightedValue::new(1, 8),
+            WeightedValue::new(1, 9),
+            WeightedValue::new(1, 10),
+        ];
+        let count = 50;  // greater than total weight
+        let mut s = ReadableSketch::new(count, data);
+        let result = s.query(0.9999999).expect("Could not query sketch");
+        assert_eq!(result, 10);
+    }
+
     fn assert_queries(data: Vec<WeightedValue>) {
-        let count = data.iter().map(|v| v.weight()).sum();
+        let count = data.iter().map(|v| v.weight).sum();
         let mut s = ReadableSketch::new(count, data.clone());
         for p in 1..100 {
             let phi = p as f64 / 100.0;
@@ -164,7 +186,7 @@ mod tests {
     fn calculate_exact(data: &[WeightedValue], phi: f64) -> Option<u64> {
         let mut values = Vec::new();
         for v in data {
-            for _ in 0..v.weight() {
+            for _ in 0..v.weight {
                 values.push(v.value);
             }
         }

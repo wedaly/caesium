@@ -150,10 +150,17 @@ impl WritableSketch {
 
     pub fn to_readable(self) -> ReadableSketch {
         let mut data = Vec::with_capacity(self.size);
+        if self.sampler.stored_weight() > 0 {
+            data.push(WeightedValue::new(
+                self.sampler.stored_weight(),
+                self.sampler.stored_value(),
+            ));
+        }
         for level in self.compactor_level_range() {
+            let weight = 1 << level;
             let c = self.get_compactor(level);
             for value in c.iter_values() {
-                data.push(WeightedValue::new(level, *value));
+                data.push(WeightedValue::new(weight, *value));
             }
         }
         ReadableSketch::new(self.count, data)
