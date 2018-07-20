@@ -101,17 +101,22 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        (self.is_sorted as u8).encode(writer)?;
-        if self.is_sorted {
-            self.data.len().encode(writer)?;
-            let mut x0 = 0;
-            for x1 in self.data.iter() {
-                let delta = x1 - x0;
-                vbyte_encode(delta, writer)?;
-                x0 = *x1;
-            }
+        let mut tmp = Vec::new();
+        let data = if self.is_sorted {
+            &self.data
         } else {
-            self.data.encode(writer)?;
+            // Sort before encoding to improve compression
+            // and to avoid sorting during later merges
+            tmp.extend_from_slice(&self.data);
+            tmp.sort_unstable();
+            &tmp
+        };
+        data.len().encode(writer)?;
+        let mut x0 = 0;
+        for x1 in data.iter() {
+            let delta = x1 - x0;
+            vbyte_encode(delta, writer)?;
+            x0 = *x1;
         }
         Ok(())
     }
@@ -122,22 +127,19 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<Compactor, EncodableError> {
-        let is_sorted = u8::decode(reader).map(|i| i != 0)?;
-        let data = if is_sorted {
-            let n = usize::decode(reader)?;
-            let mut v = Vec::with_capacity(n);
-            let mut x0 = 0;
-            for _ in 0..n {
-                let delta = vbyte_decode(reader)?;
-                let x1 = delta + x0;
-                v.push(x1);
-                x0 = x1;
-            }
-            v
-        } else {
-            Vec::<u64>::decode(reader)?
+        let n = usize::decode(reader)?;
+        let mut data = Vec::with_capacity(n);
+        let mut x0 = 0;
+        for _ in 0..n {
+            let delta = vbyte_decode(reader)?;
+            let x1 = delta + x0;
+            data.push(x1);
+            x0 = x1;
+        }
+        let compactor = Compactor {
+            data,
+            is_sorted: true,
         };
-        let compactor = Compactor { data, is_sorted };
         Ok(compactor)
     }
 }
