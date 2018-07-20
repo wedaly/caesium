@@ -3,15 +3,16 @@ use quantile::compactor::Compactor;
 use quantile::readable::{ReadableSketch, WeightedValue};
 use quantile::sampler::Sampler;
 use slab::Slab;
+use std::cmp::min;
 use std::fmt;
 use std::io::{Read, Write};
 use std::ops::RangeInclusive;
 
 const LEVEL_LIMIT: u8 = 64;
 const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
-    1024, 683, 456, 304, 203, 135, 90, 60, 40, 27, 18, 12, 8, 6, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    200, 134, 89, 60, 40, 27, 18, 12, 8, 6, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2,
 ];
 
 pub struct WritableSketch {
@@ -110,7 +111,7 @@ impl WritableSketch {
         }
 
         // Absorb victim levels < survivor level into survivor sampler
-        for level in victim.level..survivor.level {
+        for level in victim.level..min(victim.top_level() + 1, survivor.level) {
             let weight = 1 << level;
             for val in victim.get_compactor(level).iter_values() {
                 if let Some(v) = survivor.sampler.sample_weighted(*val, weight) {
@@ -270,12 +271,13 @@ impl WritableSketch {
             let size = self.get_compactor(level).size();
             if capacity == 2 && size == 0 {
                 self.level += 1;
-                self.sampler.set_max_weight(1 << level);
+                self.compactor_count -= 1;
                 let cid = self.compactor_map[level as usize]
                     .take()
                     .expect("Could not find compactor ID to remove");
                 self.compactor_slab.remove(cid);
                 self.size = self.calculate_size();
+                self.sampler.set_max_weight(1 << self.level);
             } else {
                 break;
             }
