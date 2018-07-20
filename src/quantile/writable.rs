@@ -15,6 +15,7 @@ const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
 ];
 
 pub struct WritableSketch {
+    count: usize,
     level: u8,
     size: usize,
     capacity: usize,
@@ -31,6 +32,7 @@ impl WritableSketch {
         let cid = compactor_slab.insert(Compactor::new());
         compactor_map[0] = Some(cid);
         WritableSketch {
+            count: 0,
             level: 0,
             size: 0,
             capacity: CAPACITY_AT_DEPTH[0],
@@ -41,7 +43,12 @@ impl WritableSketch {
         }
     }
 
-    fn from_parts(level: u8, sampler: Sampler, mut compactors: Vec<Compactor>) -> WritableSketch {
+    fn from_parts(
+        count: usize,
+        level: u8,
+        sampler: Sampler,
+        mut compactors: Vec<Compactor>,
+    ) -> WritableSketch {
         assert!(level as usize + compactors.len() < LEVEL_LIMIT as usize);
         assert!(!compactors.is_empty());
         let compactor_count = compactors.len();
@@ -54,6 +61,7 @@ impl WritableSketch {
         }
 
         let mut s = WritableSketch {
+            count,
             level,
             size: 0,
             capacity: 0,
@@ -68,6 +76,7 @@ impl WritableSketch {
     }
 
     pub fn insert(&mut self, val: u64) {
+        self.count += 1;
         if let Some(val) = self.sampler.sample(val) {
             {
                 let level = self.level;
@@ -133,6 +142,8 @@ impl WritableSketch {
             survivor_compactor.insert_from_other(&mut victim_compactor);
         }
 
+        survivor.count += victim.count;
+
         // Inserted values may have exceeded capacity, so compress
         survivor.size = survivor.calculate_size();
         survivor.compress();
@@ -142,11 +153,9 @@ impl WritableSketch {
 
     pub fn to_readable(self) -> ReadableSketch {
         let mut data = Vec::with_capacity(self.size + 1);
-        let mut count = 0;
 
         let sampler_weight = self.sampler.stored_weight();
         if sampler_weight > 0 {
-            count += sampler_weight;
             let sampler_value = self.sampler.stored_value();
             data.push(WeightedValue::new(sampler_weight, sampler_value));
         }
@@ -154,13 +163,12 @@ impl WritableSketch {
         for level in self.compactor_level_range() {
             let weight = 1 << level;
             let c = self.get_compactor(level);
-            count += weight * c.size();
             for value in c.iter_values() {
                 data.push(WeightedValue::new(weight, *value));
             }
         }
 
-        ReadableSketch::new(count, data)
+        ReadableSketch::new(self.count, data)
     }
 
     pub fn size(&self) -> usize {
@@ -292,6 +300,7 @@ impl Clone for WritableSketch {
         }
 
         WritableSketch {
+            count: self.count,
             level: self.level,
             size: self.size,
             capacity: self.capacity,
@@ -308,6 +317,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        self.count.encode(writer)?;
         self.level.encode(writer)?;
         self.sampler.encode(writer)?;
         self.compactor_count.encode(writer)?;
@@ -324,6 +334,7 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<WritableSketch, EncodableError> {
+        let count = usize::decode(reader)?;
         let level = u8::decode(reader)?;
         let sampler = Sampler::decode(reader)?;
         let num_compactors = usize::decode(reader)?;
@@ -343,7 +354,7 @@ where
             let c = Compactor::decode(reader)?;
             compactors.push(c);
         }
-        let s = WritableSketch::from_parts(level, sampler, compactors);
+        let s = WritableSketch::from_parts(count, level, sampler, compactors);
         Ok(s)
     }
 }

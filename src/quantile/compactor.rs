@@ -39,14 +39,27 @@ impl Compactor {
     pub fn compact(&mut self, overflow: &mut Vec<u64>) {
         debug_assert!(overflow.is_empty());
         self.ensure_sorted();
+
         let n = self.data.len();
+
+        let leftover = if n % 2 != 0 {
+            Some(self.data[n - 1])
+        } else {
+            None
+        };
+
         let mut idx = rand::random::<bool>() as usize;
         while idx < n {
             self.data[idx / 2] = self.data[idx];
             idx += 2;
         }
+
         overflow.extend_from_slice(&self.data[..n / 2]);
+
         self.data.clear();
+        if let Some(v) = leftover {
+            self.data.push(v);
+        }
     }
 
     pub fn iter_values(&self) -> Iter<u64> {
@@ -182,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn it_compacts_nonempty() {
+    fn it_compacts_even_num_items() {
         let mut c = Compactor::new();
         c.insert_sorted(&vec![1, 2, 3, 4, 5, 6]);
         let mut overflow = Vec::new();
@@ -194,6 +207,22 @@ mod tests {
             Some(2) => assert_eq!(overflow, vec![2, 4, 6]),
             _ => panic!("Unexpected value in overflow"),
         }
+    }
+
+    #[test]
+    fn it_compacts_odd_num_items() {
+        let mut c = Compactor::new();
+        c.insert_sorted(&vec![1, 2, 3, 4, 5]);
+        let mut overflow = Vec::new();
+        c.compact(&mut overflow);
+        assert_eq!(c.size(), 1);
+        assert_eq!(overflow.len(), 2);
+        match overflow.first() {
+            Some(1) => assert_eq!(overflow, vec![1, 3]),
+            Some(2) => assert_eq!(overflow, vec![2, 4]),
+            _ => panic!("Unexpected value in overflow"),
+        }
+        assert_eq!(c.data[0], 5);
     }
 
     fn assert_values(c: &Compactor, expected: &[u64]) {
