@@ -147,6 +147,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn it_inserts() {
@@ -225,6 +226,39 @@ mod tests {
             _ => panic!("Unexpected value in overflow"),
         }
         assert_eq!(c.data[0], 5);
+    }
+
+    #[test]
+    fn it_encodes_and_decodes() {
+        let mut c = Compactor::new();
+        c.insert(3);
+        c.insert(1);
+        c.insert(4);
+        c.insert(2);
+        c.insert(5);
+
+        let mut buf = Vec::<u8>::new();
+        c.encode(&mut buf).expect("Could not encode compactor");
+        let decoded = Compactor::decode(&mut &buf[..]).expect("Could not decode compactor");
+
+        // Always encoded in sorted order
+        assert!(decoded.is_sorted);
+
+        // Values should be in sorted order
+        for (v1, v2) in decoded.iter_values().zip(decoded.iter_values().skip(1)) {
+            assert!(v1 <= v2);
+        }
+
+        // Values should be the same
+        let mut s1 = HashSet::new();
+        let mut s2 = HashSet::new();
+        for v in c.iter_values() {
+            s1.insert(v);
+        }
+        for v in decoded.iter_values() {
+            s2.insert(v);
+        }
+        assert_eq!(s1, s2);
     }
 
     fn assert_values(c: &Compactor, expected: &[u64]) {
