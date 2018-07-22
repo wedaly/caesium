@@ -1,2 +1,2 @@
-[30, 60] 6
-[60, 90] 15
+start=30, end=60, approx=6, lower=4, upper=10
+start=60, end=90, approx=15, lower=13, upper=20

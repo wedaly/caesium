@@ -147,8 +147,11 @@ fn summarize_size(sketch: &WritableSketch) {
 fn summarize_error(calc: &ErrorCalculator, sketch: &mut ReadableSketch) {
     for i in 1..10 {
         let phi = (i as f64) / 10.0;
-        let approx = sketch.query(phi).expect("Could not query sketch");
-        let err = calc.calculate_error(phi, approx);
-        println!("phi={}, approx={}, err={}", phi, approx, err);
+        let q = sketch.query(phi).expect("Could not query sketch");
+        let err = calc.calculate_error(phi, q.approx_value);
+        println!(
+            "phi={}, approx={}, lower={}, upper={}, err={}",
+            phi, q.approx_value, q.lower_bound, q.upper_bound, err
+        );
     }
 }

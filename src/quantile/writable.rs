@@ -1,5 +1,6 @@
 use encode::{Decodable, Encodable, EncodableError};
 use quantile::compactor::Compactor;
+use quantile::minmax::MinMax;
 use quantile::readable::{ReadableSketch, WeightedValue};
 use quantile::sampler::Sampler;
 use slab::Slab;
@@ -20,6 +21,7 @@ pub struct WritableSketch {
     level: u8,
     size: usize,
     capacity: usize,
+    minmax: MinMax,
     sampler: Sampler,
     compactor_count: usize,
     compactor_slab: Slab<Compactor>,
@@ -37,6 +39,7 @@ impl WritableSketch {
             level: 0,
             size: 0,
             capacity: CAPACITY_AT_DEPTH[0],
+            minmax: MinMax::new(),
             sampler: Sampler::new(),
             compactor_count: 1,
             compactor_slab,
@@ -47,6 +50,7 @@ impl WritableSketch {
     fn from_parts(
         count: usize,
         level: u8,
+        minmax: MinMax,
         sampler: Sampler,
         mut compactors: Vec<Compactor>,
     ) -> WritableSketch {
@@ -66,7 +70,8 @@ impl WritableSketch {
             level,
             size: 0,
             capacity: 0,
-            sampler: sampler,
+            minmax,
+            sampler,
             compactor_count,
             compactor_slab,
             compactor_map,
@@ -78,6 +83,7 @@ impl WritableSketch {
 
     pub fn insert(&mut self, val: u64) {
         self.count += 1;
+        self.minmax.update(val);
         if let Some(val) = self.sampler.sample(val) {
             {
                 let level = self.level;
@@ -143,6 +149,7 @@ impl WritableSketch {
             survivor_compactor.insert_from_other(&mut victim_compactor);
         }
 
+        survivor.minmax.update_from_other(&victim.minmax);
         survivor.count += victim.count;
 
         // Inserted values may have exceeded capacity, so compress
@@ -169,7 +176,7 @@ impl WritableSketch {
             }
         }
 
-        ReadableSketch::new(self.count, data)
+        ReadableSketch::new(self.count, self.minmax, data)
     }
 
     pub fn size(&self) -> usize {
@@ -306,6 +313,7 @@ impl Clone for WritableSketch {
             level: self.level,
             size: self.size,
             capacity: self.capacity,
+            minmax: self.minmax.clone(),
             sampler: self.sampler.clone(),
             compactor_count: self.compactor_count,
             compactor_slab,
@@ -321,6 +329,7 @@ where
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         self.count.encode(writer)?;
         self.level.encode(writer)?;
+        self.minmax.encode(writer)?;
         self.sampler.encode(writer)?;
         self.compactor_count.encode(writer)?;
         for level in self.compactor_level_range() {
@@ -338,6 +347,7 @@ where
     fn decode(reader: &mut R) -> Result<WritableSketch, EncodableError> {
         let count = usize::decode(reader)?;
         let level = u8::decode(reader)?;
+        let minmax = MinMax::decode(reader)?;
         let sampler = Sampler::decode(reader)?;
         let num_compactors = usize::decode(reader)?;
 
@@ -356,7 +366,7 @@ where
             let c = Compactor::decode(reader)?;
             compactors.push(c);
         }
-        let s = WritableSketch::from_parts(count, level, sampler, compactors);
+        let s = WritableSketch::from_parts(count, level, minmax, sampler, compactors);
         Ok(s)
     }
 }
@@ -371,7 +381,10 @@ mod tests {
         for i in 0..100 {
             s.insert(i as u64);
         }
-        let median = s.to_readable().query(0.5).expect("Could not query median");
+        let median = s.to_readable()
+            .query(0.5)
+            .map(|q| q.approx_value)
+            .expect("Could not query median");
         assert_eq!(median, 50);
     }
 
@@ -387,6 +400,7 @@ mod tests {
         let median = merged
             .to_readable()
             .query(0.5)
+            .map(|q| q.approx_value)
             .expect("Could not query median");
         assert_eq!(median, 50);
     }

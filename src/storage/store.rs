@@ -396,6 +396,7 @@ mod tests {
             let val = row.sketch
                 .to_readable()
                 .query(0.5)
+                .map(|q| q.approx_value)
                 .expect("Could not query for median");
             assert_eq!(val, median);
         } else {

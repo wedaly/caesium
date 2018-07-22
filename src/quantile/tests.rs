@@ -12,7 +12,7 @@ const LARGE_SIZE: usize = SMALL_SIZE * 100;
 #[test]
 fn it_handles_query_with_no_values() {
     let input = Vec::new();
-    let mut s = build_readable_sketch(&input);
+    let s = build_readable_sketch(&input);
     if let Some(_) = s.query(0.1) {
         panic!("expected no result!");
     }
@@ -134,7 +134,10 @@ fn check_error_bound(sketch: &mut ReadableSketch, input: &[u64]) {
     let calc = ErrorCalculator::new(&input);
     for i in 1..10 {
         let phi = i as f64 / 10.0;
-        let approx = sketch.query(phi).expect("no result from query");
+        let approx = sketch
+            .query(phi)
+            .map(|q| q.approx_value)
+            .expect("no result from query");
         let error = calc.calculate_error(phi, approx);
         println!("phi={}, approx={}, error={}", phi, approx, error);
         assert!(error <= EPSILON * 2.0);

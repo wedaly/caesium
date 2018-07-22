@@ -1,3 +1,10 @@
+use encode::{Decodable, Encodable, EncodableError};
+use quantile::minmax::MinMax;
+use std::io::{Read, Write};
+
+// Estimated empirically, depends on sketch size
+const EPSILON: f32 = 0.015;
+
 #[derive(Copy, Clone, Debug)]
 pub struct WeightedValue {
     weight: usize,
@@ -11,81 +18,184 @@ impl WeightedValue {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct ApproxQuantile {
+    pub approx_value: u64,
+    pub lower_bound: u64,
+    pub upper_bound: u64,
+}
+
+impl<W> Encodable<W> for ApproxQuantile
+where
+    W: Write,
+{
+    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        self.approx_value.encode(writer)?;
+        self.lower_bound.encode(writer)?;
+        self.upper_bound.encode(writer)?;
+        Ok(())
+    }
+}
+
+impl<R> Decodable<ApproxQuantile, R> for ApproxQuantile
+where
+    R: Read,
+{
+    fn decode(reader: &mut R) -> Result<ApproxQuantile, EncodableError> {
+        let approx_value = u64::decode(reader)?;
+        let lower_bound = u64::decode(reader)?;
+        let upper_bound = u64::decode(reader)?;
+        Ok(ApproxQuantile {
+            approx_value,
+            lower_bound,
+            upper_bound,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct StoredValue {
+    value: u64,
+    lowest_rank: usize,
+    highest_rank: usize,
+}
+
 pub struct ReadableSketch {
-    data: Vec<WeightedValue>,
+    data: Vec<StoredValue>,
+    minmax: MinMax,
     count: usize,
 }
 
 impl ReadableSketch {
-    pub fn new(count: usize, data: Vec<WeightedValue>) -> ReadableSketch {
-        debug_assert!(count == data.iter().map(|v| v.weight).sum());
-        ReadableSketch { count, data }
+    pub fn new(
+        count: usize,
+        minmax: MinMax,
+        weighted_values: Vec<WeightedValue>,
+    ) -> ReadableSketch {
+        debug_assert!(count == weighted_values.iter().map(|v| v.weight).sum());
+        debug_assert!(minmax.min().is_some() == (count > 0));
+        debug_assert!(minmax.max().is_some() == (count > 0));
+        let data = ReadableSketch::calculate_stored_values(weighted_values);
+        ReadableSketch {
+            count,
+            minmax,
+            data,
+        }
     }
 
     pub fn size(&self) -> usize {
         self.data.len()
     }
 
-    pub fn query(&mut self, phi: f64) -> Option<u64> {
+    pub fn query(&self, phi: f64) -> Option<ApproxQuantile> {
         assert!(0.0 < phi && phi < 1.0);
         if self.count > 0 {
             let target_rank = (self.count as f64 * phi) as usize;
-            let result = ReadableSketch::quick_select(target_rank, &mut self.data);
+            let idx = self.binary_search(target_rank);
+            let approx_value = self.data[idx].value;
+            let max_rank_error = (self.count as f32 * EPSILON).ceil() as usize;
+            let lower_bound = self.find_lower_bound(target_rank, idx, approx_value, max_rank_error);
+            let upper_bound = self.find_upper_bound(target_rank, idx, approx_value, max_rank_error);
+            debug_assert!(lower_bound <= approx_value);
+            debug_assert!(upper_bound >= approx_value);
+            let result = ApproxQuantile {
+                approx_value,
+                lower_bound,
+                upper_bound,
+            };
             Some(result)
         } else {
             None
         }
     }
 
-    fn quick_select(k: usize, mut data: &mut [WeightedValue]) -> u64 {
-        let (mut left, mut right) = (0, data.len());
-        let mut left_weight = 0;
-
-        // at each iteration, search the range [left, right)
-        while left != right {
-            let mut pivot_idx = left + (right - left) / 2;
-            let left_to_pivot_weight =
-                ReadableSketch::partition(&mut data, &mut pivot_idx, left, right);
-            let weight_to_pivot = left_weight + left_to_pivot_weight;
-            if weight_to_pivot <= k && k < weight_to_pivot + data[pivot_idx].weight {
-                return data[pivot_idx].value;
-            } else if k < weight_to_pivot {
-                right = pivot_idx;
+    fn calculate_stored_values(mut weighted_values: Vec<WeightedValue>) -> Vec<StoredValue> {
+        let mut result = Vec::<StoredValue>::with_capacity(weighted_values.len());
+        let mut rank = 0;
+        weighted_values.sort_unstable_by(|x, y| x.value.cmp(&y.value));
+        for wv in weighted_values.iter() {
+            let n = result.len();
+            if n > 0 && result[n - 1].value == wv.value {
+                result[n - 1].highest_rank += wv.weight;
             } else {
-                let new_weight: usize = data[left..pivot_idx + 1].iter().map(|v| v.weight).sum();
-                left_weight += new_weight;
-                left = pivot_idx + 1;
+                let sv = StoredValue {
+                    value: wv.value,
+                    lowest_rank: rank,
+                    highest_rank: rank + wv.weight - 1,
+                };
+                result.push(sv);
+            }
+            rank += wv.weight;
+        }
+        result
+    }
+
+    fn binary_search(&self, rank: usize) -> usize {
+        let (mut i, mut j) = (0, self.data.len());
+        while i < j {
+            // search range [i, j)
+            let midpoint = (j - i) / 2 + i;
+            let sv = &self.data[midpoint];
+            if sv.highest_rank < rank {
+                // search right
+                i = midpoint + 1;
+            } else if sv.lowest_rank > rank {
+                // search left
+                j = midpoint;
+            } else {
+                debug_assert!(sv.lowest_rank <= rank);
+                debug_assert!(sv.highest_rank >= rank);
+                return midpoint;
             }
         }
 
-        data[left].value
+        // Should always find a result, since stored values cover all ranks
+        debug_assert!(i == j);
+        debug_assert!(self.data[i].lowest_rank <= rank);
+        debug_assert!(self.data[i].highest_rank >= rank);
+        i
     }
 
-    fn partition(
-        mut data: &mut [WeightedValue],
-        pivot_idx: &mut usize,
-        left: usize,
-        right: usize,
-    ) -> usize {
-        let pivot_val = data[*pivot_idx].value;
-        let mut weight = 0;
-        ReadableSketch::swap(&mut data, *pivot_idx, right - 1);
-        *pivot_idx = left;
-        for j in left..right - 1 {
-            if data[j].value < pivot_val {
-                weight += data[j].weight;
-                ReadableSketch::swap(data, *pivot_idx, j);
-                *pivot_idx += 1;
+    fn find_lower_bound(
+        &self,
+        rank: usize,
+        mut idx: usize,
+        approx_value: u64,
+        max_rank_error: usize,
+    ) -> u64 {
+        loop {
+            if idx == 0 {
+                return self.minmax.min().expect("Could not retrieve min");
             }
+
+            let sv = &self.data[idx - 1];
+            if sv.highest_rank + max_rank_error < rank && sv.value <= approx_value {
+                return sv.value;
+            }
+
+            idx -= 1;
         }
-        ReadableSketch::swap(&mut data, *pivot_idx, right - 1);
-        weight
     }
 
-    fn swap(data: &mut [WeightedValue], i: usize, j: usize) {
-        let tmp = data[i];
-        data[i] = data[j];
-        data[j] = tmp;
+    fn find_upper_bound(
+        &self,
+        rank: usize,
+        mut idx: usize,
+        approx_value: u64,
+        max_rank_error: usize,
+    ) -> u64 {
+        loop {
+            if idx == self.data.len() - 1 {
+                return self.minmax.max().expect("Could not retrieve max");
+            }
+
+            let sv = &self.data[idx + 1];
+            if sv.lowest_rank - max_rank_error < rank && sv.value >= approx_value {
+                return sv.value;
+            }
+
+            idx += 1;
+        }
     }
 }
 
@@ -97,7 +207,7 @@ mod tests {
 
     #[test]
     fn it_queries_empty() {
-        let mut s = ReadableSketch::new(0, vec![]);
+        let s = ReadableSketch::new(0, MinMax::new(), vec![]);
         assert_eq!(s.query(0.5), None);
     }
 
@@ -149,11 +259,13 @@ mod tests {
 
     fn assert_queries(data: Vec<WeightedValue>) {
         let count = data.iter().map(|v| v.weight).sum();
-        let mut s = ReadableSketch::new(count, data.clone());
+        let values: Vec<u64> = data.iter().map(|v| v.value).collect();
+        let minmax = MinMax::from_values(&values);
+        let s = ReadableSketch::new(count, minmax, data.clone());
         for p in 1..100 {
             let phi = p as f64 / 100.0;
             let expected = calculate_exact(&data, phi);
-            let actual = s.query(phi);
+            let actual = s.query(phi).map(|q| q.approx_value);
             println!("phi={}, expected={:?}, actual={:?}", phi, expected, actual);
             assert_eq!(actual, expected);
         }

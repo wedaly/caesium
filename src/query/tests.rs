@@ -15,7 +15,13 @@ fn build_data_row(window: TimeWindow) -> DataRow {
 
 fn assert_rows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp, u64)>) {
     let actual: Vec<(TimeStamp, TimeStamp, u64)> = rows.iter()
-        .map(|r| (r.window.start(), r.window.end(), r.value))
+        .map(|r| {
+            (
+                r.window().start(),
+                r.window().end(),
+                r.quantile().approx_value,
+            )
+        })
         .collect();
     assert_eq!(actual, *expected);
 }

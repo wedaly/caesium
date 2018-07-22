@@ -1,17 +1,25 @@
 use encode::{Decodable, Encodable, EncodableError};
+use quantile::readable::ApproxQuantile;
 use std::io::{Read, Write};
-use time::{TimeStamp, TimeWindow};
+use time::TimeWindow;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QueryResult {
-    pub window: TimeWindow,
-    pub value: u64,
+    window: TimeWindow,
+    quantile: ApproxQuantile,
 }
 
 impl QueryResult {
-    pub fn new(start: TimeStamp, end: TimeStamp, value: u64) -> QueryResult {
-        let window = TimeWindow::new(start, end);
-        QueryResult { window, value }
+    pub fn new(window: TimeWindow, quantile: ApproxQuantile) -> QueryResult {
+        QueryResult { window, quantile }
+    }
+
+    pub fn window(&self) -> TimeWindow {
+        self.window
+    }
+
+    pub fn quantile(&self) -> ApproxQuantile {
+        self.quantile
     }
 }
 
@@ -21,7 +29,7 @@ where
 {
     fn encode(&self, mut writer: &mut W) -> Result<(), EncodableError> {
         self.window.encode(&mut writer)?;
-        self.value.encode(&mut writer)?;
+        self.quantile.encode(&mut writer)?;
         Ok(())
     }
 }
@@ -32,8 +40,8 @@ where
 {
     fn decode(mut reader: &mut R) -> Result<QueryResult, EncodableError> {
         let window = TimeWindow::decode(&mut reader)?;
-        let value = u64::decode(&mut reader)?;
-        Ok(QueryResult { window, value })
+        let quantile = ApproxQuantile::decode(&mut reader)?;
+        Ok(QueryResult::new(window, quantile))
     }
 }
 

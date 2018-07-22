@@ -1,1 +1,1 @@
-[10, 40] 10
+start=10, end=40, approx=10, lower=9, upper=20

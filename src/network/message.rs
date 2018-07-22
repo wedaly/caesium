@@ -99,6 +99,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quantile::readable::ApproxQuantile;
 
     #[test]
     fn it_encodes_and_decodes_insert_msg() {
@@ -139,7 +140,24 @@ mod tests {
 
     #[test]
     fn it_encodes_and_decodes_query_success_msg() {
-        let results = vec![QueryResult::new(0, 30, 1), QueryResult::new(30, 60, 2)];
+        let results = vec![
+            QueryResult::new(
+                TimeWindow::new(0, 30),
+                ApproxQuantile {
+                    approx_value: 1,
+                    lower_bound: 0,
+                    upper_bound: 2,
+                },
+            ),
+            QueryResult::new(
+                TimeWindow::new(30, 60),
+                ApproxQuantile {
+                    approx_value: 2,
+                    lower_bound: 1,
+                    upper_bound: 5,
+                },
+            ),
+        ];
         let msg = Message::QuerySuccessResp(results);
         let mut buf = Vec::new();
         msg.encode(&mut buf)
@@ -151,14 +169,18 @@ mod tests {
                 assert_eq!(results.len(), 2);
 
                 let first = results.get(0).unwrap();
-                assert_eq!(first.window.start(), 0);
-                assert_eq!(first.window.end(), 30);
-                assert_eq!(first.value, 1);
+                assert_eq!(first.window().start(), 0);
+                assert_eq!(first.window().end(), 30);
+                assert_eq!(first.quantile().approx_value, 1);
+                assert_eq!(first.quantile().lower_bound, 0);
+                assert_eq!(first.quantile().upper_bound, 2);
 
                 let second = results.get(1).unwrap();
-                assert_eq!(second.window.start(), 30);
-                assert_eq!(second.window.end(), 60);
-                assert_eq!(second.value, 2);
+                assert_eq!(second.window().start(), 30);
+                assert_eq!(second.window().end(), 60);
+                assert_eq!(second.quantile().approx_value, 2);
+                assert_eq!(second.quantile().lower_bound, 1);
+                assert_eq!(second.quantile().upper_bound, 5);
             }
             _ => panic!("Decoded wrong message type"),
         }

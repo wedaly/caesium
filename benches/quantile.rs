@@ -5,7 +5,6 @@ extern crate rand;
 
 use bencher::Bencher;
 use caesium::encode::{Decodable, Encodable};
-use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::writable::WritableSketch;
 use rand::Rng;
 
@@ -39,11 +38,6 @@ fn build_writable_sketch(n: usize, randomize: bool) -> WritableSketch {
         insert_sequential(&mut s, n);
     }
     s
-}
-
-fn build_readable_sketch(n: usize) -> ReadableSketch {
-    let s = build_writable_sketch(n, true);
-    s.to_readable()
 }
 
 fn bench_insert_one_empty(bench: &mut Bencher) {
@@ -81,23 +75,23 @@ fn bench_insert_many_nonempty(bench: &mut Bencher) {
 }
 
 fn bench_query_small_sketch(bench: &mut Bencher) {
-    let mut s = build_readable_sketch(256);
-    bench.iter(|| s.query(0.5))
+    let s = build_writable_sketch(256, true);
+    bench.iter(|| s.clone().to_readable().query(0.5))
 }
 
 fn bench_query_full_sketch_one_tenth(bench: &mut Bencher) {
-    let mut s = build_readable_sketch(4096);
-    bench.iter(|| s.query(0.1))
+    let s = build_writable_sketch(4096, true);
+    bench.iter(|| s.clone().to_readable().query(0.1))
 }
 
 fn bench_query_full_sketch_median(bench: &mut Bencher) {
-    let mut s = build_readable_sketch(4096);
-    bench.iter(|| s.query(0.5))
+    let s = build_writable_sketch(4096, true);
+    bench.iter(|| s.clone().to_readable().query(0.5))
 }
 
 fn bench_query_full_sketch_nine_tenths(bench: &mut Bencher) {
-    let mut s = build_readable_sketch(4096);
-    bench.iter(|| s.query(0.9))
+    let s = build_writable_sketch(4096, true);
+    bench.iter(|| s.clone().to_readable().query(0.9))
 }
 
 fn bench_merge_two_sketches_sequential_data(bench: &mut Bencher) {

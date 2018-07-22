@@ -1,3 +1,4 @@
+use quantile::readable::ApproxQuantile;
 use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use time::TimeWindow;
@@ -5,7 +6,7 @@ use time::TimeWindow;
 pub enum OpOutput {
     End,
     Sketch(TimeWindow, WritableSketch),
-    Quantile(TimeWindow, Option<u64>),
+    Quantile(TimeWindow, Option<ApproxQuantile>),
 }
 
 pub trait QueryOp {

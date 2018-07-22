@@ -1,1 +1,1 @@
-[10, 100] 13
+start=10, end=100, approx=13, lower=11, upper=20
