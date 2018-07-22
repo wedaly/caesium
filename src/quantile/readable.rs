@@ -257,6 +257,42 @@ mod tests {
         assert_queries(data);
     }
 
+    #[test]
+    fn it_calculates_upper_and_lower_bounds_single_value() {
+        let data = vec![WeightedValue::new(1, 1)];
+        let minmax = MinMax::from_values(&vec![1]);
+        let s = ReadableSketch::new(1, minmax, data);
+        let q = s.query(0.5);
+        let lower = q.map(|q| q.lower_bound);
+        let upper = q.map(|q| q.upper_bound);
+        assert_eq!(lower, Some(1));
+        assert_eq!(upper, Some(1));
+    }
+
+    #[test]
+    fn it_calculates_upper_and_lower_bounds_many_values() {
+        let mut data = Vec::new();
+        let mut count = 0;
+        let mut minmax = MinMax::new();
+        for level in 0..4 {
+            let weight = 1 << level;
+            for value in 0..64 {
+                data.push(WeightedValue::new(weight, value as u64));
+                minmax.update(value as u64);
+                count += weight;
+            }
+        }
+        let s = ReadableSketch::new(count, minmax, data);
+        let q = s.query(0.5);
+        let approx = q.map(|q| q.approx_value).unwrap();
+        let lower = q.map(|q| q.lower_bound).unwrap();
+        let upper = q.map(|q| q.upper_bound).unwrap();
+        assert!(lower > 0);
+        assert!(lower <= approx);
+        assert!(approx <= upper);
+        assert!(upper < 64);
+    }
+
     fn assert_queries(data: Vec<WeightedValue>) {
         let count = data.iter().map(|v| v.weight).sum();
         let values: Vec<u64> = data.iter().map(|v| v.value).collect();
