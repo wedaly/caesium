@@ -282,7 +282,10 @@ mod tests {
                 count += weight;
             }
         }
+
         let s = ReadableSketch::new(count, minmax, data);
+        assert_eq!(s.size(), 64); // deduplicate stored values
+
         let q = s.query(0.5);
         let approx = q.map(|q| q.approx_value).unwrap();
         let lower = q.map(|q| q.lower_bound).unwrap();
