@@ -10,8 +10,14 @@ use std::io::{Read, Write};
 use std::ops::RangeInclusive;
 
 const LEVEL_LIMIT: u8 = 64;
+
+// Capacities calculated using:
+// * failure probability (delta) = 10e-8
+// * maximum normalized rank error (epsilon) = 1.5e-2
+// * top levels (s) = log(log(1/delta)) ~= 5
+// * top capacity (k) = (1 / epsilon) * s ~= 200
 const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
-    200, 134, 89, 60, 40, 27, 18, 12, 8, 6, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    200, 200, 200, 200, 200, 27, 18, 12, 8, 6, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2,
 ];
