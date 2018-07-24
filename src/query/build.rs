@@ -85,9 +85,15 @@ fn build_quantile_op<'a>(
     args: &[Box<Expression>],
     source: &'a DataSource,
 ) -> Result<Box<QueryOp + 'a>, QueryError> {
-    let phi = get_float_arg(args, 0)?;
-    let input = get_func_arg(args, 1, source)?;
-    let op = QuantileOp::new(phi, input)?;
+    if args.len() < 2 {
+        return Err(QueryError::MissingArg);
+    }
+    let input = get_func_arg(args, 0, source)?;
+    let mut phi_vec = Vec::new();
+    for i in 1..args.len() {
+        phi_vec.push(get_float_arg(args, i)?);
+    }
+    let op = QuantileOp::new(input, phi_vec)?;
     Ok(Box::new(op))
 }
 

@@ -128,12 +128,12 @@ mod tests {
 
     #[test]
     fn it_encodes_and_decodes_query_msg() {
-        let msg = Message::QueryReq("quantile(0.5, fetch(foo))".to_string());
+        let msg = Message::QueryReq("quantile(fetch(foo), 0.5)".to_string());
         let mut buf = Vec::new();
         msg.encode(&mut buf).expect("Could not encode query msg");
         let decoded = Message::decode(&mut &buf[..]).expect("Could not decode query msg");
         match decoded {
-            Message::QueryReq(q) => assert_eq!(q, "quantile(0.5, fetch(foo))"),
+            Message::QueryReq(q) => assert_eq!(q, "quantile(fetch(foo), 0.5)"),
             _ => panic!("Decoded wrong message type"),
         }
     }
@@ -143,7 +143,9 @@ mod tests {
         let results = vec![
             QueryResult::new(
                 TimeWindow::new(0, 30),
+                0.5,
                 ApproxQuantile {
+                    count: 100,
                     approx_value: 1,
                     lower_bound: 0,
                     upper_bound: 2,
@@ -151,7 +153,9 @@ mod tests {
             ),
             QueryResult::new(
                 TimeWindow::new(30, 60),
+                0.7,
                 ApproxQuantile {
+                    count: 200,
                     approx_value: 2,
                     lower_bound: 1,
                     upper_bound: 5,
@@ -171,6 +175,8 @@ mod tests {
                 let first = results.get(0).unwrap();
                 assert_eq!(first.window().start(), 0);
                 assert_eq!(first.window().end(), 30);
+                assert_eq!(first.phi(), 0.5);
+                assert_eq!(first.quantile().count, 100);
                 assert_eq!(first.quantile().approx_value, 1);
                 assert_eq!(first.quantile().lower_bound, 0);
                 assert_eq!(first.quantile().upper_bound, 2);
@@ -178,6 +184,8 @@ mod tests {
                 let second = results.get(1).unwrap();
                 assert_eq!(second.window().start(), 30);
                 assert_eq!(second.window().end(), 60);
+                assert_eq!(second.phi(), 0.7);
+                assert_eq!(second.quantile().count, 200);
                 assert_eq!(second.quantile().approx_value, 2);
                 assert_eq!(second.quantile().lower_bound, 1);
                 assert_eq!(second.quantile().upper_bound, 5);

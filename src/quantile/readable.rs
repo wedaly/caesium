@@ -20,6 +20,7 @@ impl WeightedValue {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ApproxQuantile {
+    pub count: usize,
     pub approx_value: u64,
     pub lower_bound: u64,
     pub upper_bound: u64,
@@ -30,6 +31,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        self.count.encode(writer)?;
         self.approx_value.encode(writer)?;
         self.lower_bound.encode(writer)?;
         self.upper_bound.encode(writer)?;
@@ -42,10 +44,12 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<ApproxQuantile, EncodableError> {
+        let count = usize::decode(reader)?;
         let approx_value = u64::decode(reader)?;
         let lower_bound = u64::decode(reader)?;
         let upper_bound = u64::decode(reader)?;
         Ok(ApproxQuantile {
+            count,
             approx_value,
             lower_bound,
             upper_bound,
@@ -99,6 +103,7 @@ impl ReadableSketch {
             debug_assert!(lower_bound <= approx_value);
             debug_assert!(upper_bound >= approx_value);
             let result = ApproxQuantile {
+                count: self.count,
                 approx_value,
                 lower_bound,
                 upper_bound,

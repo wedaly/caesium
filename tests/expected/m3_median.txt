@@ -1,1 +1,1 @@
-start=10, end=100, approx=13, lower=11, upper=20
+start=10, end=100, phi=0.5, count=32, approx=13, lower=11, upper=20

@@ -6,7 +6,7 @@ use time::TimeWindow;
 pub enum OpOutput {
     End,
     Sketch(TimeWindow, WritableSketch),
-    Quantile(TimeWindow, Option<ApproxQuantile>),
+    Quantile(TimeWindow, f64, Option<ApproxQuantile>),
 }
 
 pub trait QueryOp {

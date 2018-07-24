@@ -33,9 +33,11 @@ fn handle_query(client: &mut Client, q: &str) {
 fn print_results(results: &[QueryResult]) {
     for r in results.iter() {
         println!(
-            "start={}, end={}, approx={}, lower={}, upper={}",
+            "start={}, end={}, phi={}, count={}, approx={}, lower={}, upper={}",
             r.window().start(),
             r.window().end(),
+            r.phi(),
+            r.quantile().count,
             r.quantile().approx_value,
             r.quantile().lower_bound,
             r.quantile().upper_bound
