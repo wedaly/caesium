@@ -185,6 +185,10 @@ impl WritableSketch {
         ReadableSketch::new(self.count, self.minmax, data)
     }
 
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
     pub fn size(&self) -> usize {
         self.size
     }

@@ -4,7 +4,7 @@ use query::ops::{OpOutput, QueryOp};
 use std::cmp::{max, min, Ordering};
 use std::collections::BinaryHeap;
 use std::ops::DerefMut;
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 pub struct CombineOp<'a> {
     inputs: Vec<Box<QueryOp + 'a>>,

@@ -1,7 +1,7 @@
 use encode::{Decodable, Encodable, EncodableError};
 use quantile::readable::ApproxQuantile;
 use std::io::{Read, Write};
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QueryResult {

@@ -5,7 +5,7 @@ use quantile::writable::WritableSketch;
 use query::result::QueryResult;
 use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::time::Duration;
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 pub struct Client {
     addr: SocketAddr,

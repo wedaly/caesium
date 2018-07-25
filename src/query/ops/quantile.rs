@@ -2,7 +2,7 @@ use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::collections::VecDeque;
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 pub struct QuantileOp<'a> {
     input: Box<QueryOp + 'a>,

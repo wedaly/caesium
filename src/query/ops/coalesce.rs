@@ -2,7 +2,7 @@ use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::cmp::{max, min};
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 pub struct CoalesceOp<'a> {
     input: Box<QueryOp + 'a>,

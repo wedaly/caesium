@@ -1,7 +1,7 @@
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use storage::datasource::{DataCursor, DataSource};
-use time::TimeStamp;
+use time::timestamp::TimeStamp;
 
 pub struct FetchOp<'a> {
     cursor: Box<DataCursor + 'a>,

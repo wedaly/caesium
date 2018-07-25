@@ -1,7 +1,7 @@
 use quantile::readable::ApproxQuantile;
 use quantile::writable::WritableSketch;
 use query::error::QueryError;
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 pub enum OpOutput {
     End,

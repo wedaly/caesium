@@ -2,7 +2,7 @@ use encode::{Decodable, Encodable, EncodableError};
 use quantile::writable::WritableSketch;
 use query::result::QueryResult;
 use std::io::{Read, Write};
-use time::TimeWindow;
+use time::window::TimeWindow;
 
 #[derive(Debug)]
 pub enum Message {

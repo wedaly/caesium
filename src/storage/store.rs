@@ -5,7 +5,8 @@ use std::cmp::{max, min};
 use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::{TimeStamp, TimeWindow};
+use time::timestamp::TimeStamp;
+use time::window::TimeWindow;
 
 pub struct MetricStore {
     raw_db: rocksdb::DB,
@@ -32,6 +33,7 @@ impl MetricStore {
         window: TimeWindow,
         sketch: WritableSketch,
     ) -> Result<(), StorageError> {
+        MetricStore::validate_metric_name(metric)?;
         let key = MetricStore::key(metric, window.start())?;
         let val = MetricStore::val(window, sketch)?;
         debug!("Inserted key for metric {} and window {:?}", metric, window);
@@ -104,6 +106,17 @@ impl MetricStore {
         }
     }
 
+    fn validate_metric_name(s: &str) -> Result<(), StorageError> {
+        if s.is_empty()
+            || s.chars().next().map(|c| !c.is_ascii_alphabetic()).unwrap()
+            || s.chars().any(|c| !c.is_ascii_alphanumeric())
+        {
+            Err(StorageError::InvalidMetricName)
+        } else {
+            Ok(())
+        }
+    }
+
     fn key(metric: &str, window_start: TimeStamp) -> Result<Vec<u8>, StorageError> {
         let mut buf = Vec::new();
         metric.encode(&mut buf)?;
@@ -126,6 +139,7 @@ impl DataSource for MetricStore {
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,
     ) -> Result<Box<DataCursor + 'a>, StorageError> {
+        MetricStore::validate_metric_name(metric)?;
         let ts = start.unwrap_or(0);
         let end_ts = end.unwrap_or(u64::max_value());
         let prefix = MetricStore::key(metric, ts)?;
@@ -362,6 +376,32 @@ mod tests {
             let next_row = cursor.get_next().expect("Could not get next row");
             assert!(next_row.is_none());
         })
+    }
+
+    #[test]
+    fn it_validates_metric_name_on_insert() {
+        with_test_store(
+            |store| match store.insert(&"", TimeWindow::new(0, 30), build_sketch()) {
+                Err(StorageError::InvalidMetricName) => {}
+                _ => panic!("Expected invalid metric name error"),
+            },
+        )
+    }
+
+    #[test]
+    fn it_validates_metric_name_on_fetch() {
+        with_test_store(|store| match store.fetch_range(&"", None, None) {
+            Err(StorageError::InvalidMetricName) => {}
+            _ => panic!("Expected invalid metric name error"),
+        })
+    }
+
+    #[test]
+    fn it_rejects_invalid_metric_names() {
+        assert_eq!(MetricStore::validate_metric_name("").is_ok(), false);
+        assert_eq!(MetricStore::validate_metric_name("1").is_ok(), false);
+        assert_eq!(MetricStore::validate_metric_name("1foo").is_ok(), false);
+        assert_eq!(MetricStore::validate_metric_name("foo&bar").is_ok(), false);
     }
 
     fn with_test_store<T>(test: T) -> ()

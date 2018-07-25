@@ -6,7 +6,7 @@ use query::execute::execute_query;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage::store::MetricStore;
-use time::TimeWindow;
+use time::window::TimeWindow;
 use tokio;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};

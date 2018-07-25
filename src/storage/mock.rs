@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
-use time::TimeStamp;
+use time::timestamp::TimeStamp;
 
 pub struct MockDataSource {
     data: HashMap<String, Vec<DataRow>>,

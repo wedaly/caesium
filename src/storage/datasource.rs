@@ -1,6 +1,7 @@
 use quantile::writable::WritableSketch;
 use storage::error::StorageError;
-use time::{TimeStamp, TimeWindow};
+use time::timestamp::TimeStamp;
+use time::window::TimeWindow;
 
 #[derive(Clone)]
 pub struct DataRow {

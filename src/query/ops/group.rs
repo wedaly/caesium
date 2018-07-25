@@ -2,7 +2,8 @@ use quantile::writable::WritableSketch;
 use query::error::QueryError;
 use query::ops::{OpOutput, QueryOp};
 use std::cmp::{max, min};
-use time::{days, hours, TimeWindow};
+use time::timestamp::{days, hours};
+use time::window::TimeWindow;
 
 pub struct GroupOp<'a> {
     input: Box<QueryOp + 'a>,

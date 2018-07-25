@@ -5,6 +5,7 @@ use rocksdb;
 pub enum StorageError {
     EncodableError(EncodableError),
     DatabaseError(rocksdb::Error),
+    InvalidMetricName,
 }
 
 impl From<rocksdb::Error> for StorageError {

@@ -3,7 +3,8 @@ use query::execute::execute_query;
 use query::result::QueryResult;
 use storage::datasource::DataRow;
 use storage::mock::MockDataSource;
-use time::{TimeStamp, TimeWindow};
+use time::timestamp::TimeStamp;
+use time::window::TimeWindow;
 
 fn build_data_row(window: TimeWindow) -> DataRow {
     let mut sketch = WritableSketch::new();
