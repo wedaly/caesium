@@ -17,7 +17,8 @@ impl InsertCmd {
             ).expect("Could not compile regex");
         }
 
-        INSERT_CMD_RE.captures(s)
+        INSERT_CMD_RE
+            .captures(s)
             .and_then(|c| match (c.name("metric"), c.name("value")) {
                 (Some(metric_match), Some(value_match)) => value_match
                     .as_str()

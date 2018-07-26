@@ -17,7 +17,7 @@ pub fn processor_thread(input: Receiver<InsertCmd>, output: Sender<MetricState>)
     loop {
         match input.recv_timeout(RECV_TIMEOUT) {
             Ok(cmd) => p.process_cmd(cmd),
-            Err(RecvTimeoutError::Timeout) => debug!("Channel timeout"),
+            Err(RecvTimeoutError::Timeout) => trace!("Channel timeout"),
             Err(RecvTimeoutError::Disconnected) => {
                 info!("Channel closed, stopping processing thread");
                 break;

@@ -1,10 +1,11 @@
-use encode::{Decodable, Encodable};
+use encode::Decodable;
 use quantile::writable::WritableSketch;
 use rocksdb;
-use std::cmp::{max, min};
 use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
+use storage::key::StorageKey;
+use storage::value::StorageValue;
 use time::timestamp::TimeStamp;
 use time::window::TimeWindow;
 
@@ -34,8 +35,8 @@ impl MetricStore {
         sketch: WritableSketch,
     ) -> Result<(), StorageError> {
         MetricStore::validate_metric_name(metric)?;
-        let key = MetricStore::key(metric, window.start())?;
-        let val = MetricStore::val(window, sketch)?;
+        let key = StorageKey::as_bytes(metric, window.start())?;
+        let val = StorageValue::as_bytes(window, sketch)?;
         debug!("Inserted key for metric {} and window {:?}", metric, window);
         self.raw_db.merge(&key, &val)?;
         Ok(())
@@ -46,64 +47,35 @@ impl MetricStore {
         existing_val: Option<&[u8]>,
         operands: &mut rocksdb::MergeOperands,
     ) -> Option<Vec<u8>> {
-        let mut window_start = TimeStamp::max_value();
-        let mut window_end = 0;
-        let mut merged = WritableSketch::new();
-        if let Some(bytes) = existing_val {
-            merged = MetricStore::safe_merge(merged, &mut window_start, &mut window_end, bytes);
-        }
+        let mut result =
+            existing_val.and_then(|mut bytes| match StorageValue::decode(&mut bytes) {
+                Ok(v) => Some(v),
+                Err(err) => {
+                    error!("Could not deserialize existing value: {:?}", err);
+                    None
+                }
+            });
 
         for mut bytes in operands {
-            merged = MetricStore::safe_merge(merged, &mut window_start, &mut window_end, bytes);
+            result = match StorageValue::decode(&mut bytes) {
+                Ok(v1) => match result {
+                    None => Some(v1),
+                    Some(v2) => Some(v1.merge(v2)),
+                },
+                Err(err) => {
+                    error!("Could not deserialize operand value: {:?}", err);
+                    result
+                }
+            }
         }
 
-        let window = TimeWindow::new(window_start, window_end);
-        MetricStore::safe_encode(window, merged)
-    }
-
-    fn safe_merge(
-        dst: WritableSketch,
-        start: &mut TimeStamp,
-        end: &mut TimeStamp,
-        bytes: &[u8],
-    ) -> WritableSketch {
-        let mut cursor = Cursor::new(bytes);
-        let (merged_start, merged_end) = match TimeWindow::decode(&mut cursor) {
-            Ok(w) => {
-                let min_start = min(*start, w.start());
-                let max_end = max(*end, w.end());
-                (min_start, max_end)
-            }
+        result.and_then(|v| match v.to_bytes() {
+            Ok(bytes) => Some(bytes),
             Err(err) => {
-                error!("Could not deserialize time window from DB value: {:?}", err);
-                return dst;
+                error!("Could not serialize merged value to bytes: {:?}", err);
+                None
             }
-        };
-
-        match WritableSketch::decode(&mut cursor) {
-            Ok(s) => {
-                *start = merged_start;
-                *end = merged_end;
-                dst.merge(s)
-            }
-            Err(err) => {
-                error!("Could not deserialize sketch from DB value: {:?}", err);
-                dst
-            }
-        }
-    }
-
-    fn safe_encode(window: TimeWindow, sketch: WritableSketch) -> Option<Vec<u8>> {
-        let mut buf = Vec::new();
-        if let Err(err) = window.encode(&mut buf) {
-            error!("Could not encode time window to DB value: {:?}", err);
-            None
-        } else if let Err(err) = sketch.encode(&mut buf) {
-            error!("Could not encode sketch to DB value: {:?}", err);
-            None
-        } else {
-            Some(buf)
-        }
+        })
     }
 
     fn validate_metric_name(s: &str) -> Result<(), StorageError> {
@@ -115,20 +87,6 @@ impl MetricStore {
         } else {
             Ok(())
         }
-    }
-
-    fn key(metric: &str, window_start: TimeStamp) -> Result<Vec<u8>, StorageError> {
-        let mut buf = Vec::new();
-        metric.encode(&mut buf)?;
-        window_start.encode(&mut buf)?;
-        Ok(buf)
-    }
-
-    fn val(window: TimeWindow, sketch: WritableSketch) -> Result<Vec<u8>, StorageError> {
-        let mut buf = Vec::new();
-        window.encode(&mut buf)?;
-        sketch.encode(&mut buf)?;
-        Ok(buf)
     }
 }
 
@@ -142,7 +100,7 @@ impl DataSource for MetricStore {
         MetricStore::validate_metric_name(metric)?;
         let ts = start.unwrap_or(0);
         let end_ts = end.unwrap_or(u64::max_value());
-        let prefix = MetricStore::key(metric, ts)?;
+        let prefix = StorageKey::as_bytes(metric, ts)?;
         let raw_iter = self.raw_db.prefix_iterator(&prefix);
         let cursor = MetricCursor::new(raw_iter, metric.to_string(), end_ts);
         Ok(Box::new(cursor))
@@ -171,19 +129,14 @@ impl DataCursor for MetricCursor {
             None => None,
             Some((key, val)) => {
                 let mut key_reader = Cursor::new(key);
-                let metric = String::decode(&mut key_reader)?;
-                let window_start = u64::decode(&mut key_reader)?;
-                if metric != self.metric || window_start >= self.end {
+                let key = StorageKey::decode(&mut key_reader)?;
+                if key.metric() != self.metric || key.window_start() >= self.end {
                     None
                 } else {
-                    debug!(
-                        "Fetching key for metric {} and timestamp {}",
-                        metric, window_start
-                    );
+                    debug!("Fetching key {:?}", key);
                     let mut val_reader = Cursor::new(val);
-                    let window = TimeWindow::decode(&mut val_reader)?;
-                    let sketch = WritableSketch::decode(&mut val_reader)?;
-                    Some(DataRow { window, sketch })
+                    let val = StorageValue::decode(&mut val_reader)?;
+                    Some(val.to_data_row())
                 }
             }
         };
