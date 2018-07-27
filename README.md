@@ -11,6 +11,11 @@ Getting Started
 2. Start the server: `cargo run --bin server`
 3. Start the daemon: `cargo run --bin daemon`
 
+To enable logging to stdout, set the environment variable:
+```
+RUST_LOG=caesium=debug
+```
+
 
 Inserting and Querying
 ----------------------
