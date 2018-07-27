@@ -12,7 +12,6 @@ extern crate uuid;
 #[macro_use]
 pub mod encode;
 pub mod network;
-pub mod perf;
 pub mod quantile;
 pub mod query;
 pub mod storage;

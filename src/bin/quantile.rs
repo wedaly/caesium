@@ -1,10 +1,10 @@
 extern crate caesium;
 extern crate rand;
 use caesium::encode::Encodable;
-use caesium::perf::Timer;
 use caesium::quantile::error::ErrorCalculator;
 use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::writable::WritableSketch;
+use caesium::time::timer::Timer;
 use rand::Rng;
 use std::env;
 use std::fs::File;
