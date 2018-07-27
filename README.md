@@ -1,7 +1,7 @@
 Caesium
 =======
 
-Experimental system for application monitoring at scale, so named because: caesium is an element used in atomic clocks; clocks are used to measure application response times; this system monitors application response times.
+Experimental system for application monitoring, so named because: caesium is an element used in atomic clocks; clocks are used to measure application response times; this system monitors application response times.
 
 
 Getting Started
@@ -26,7 +26,7 @@ bash -c "echo -n \"foo:100|ms\" >/dev/udp/127.0.0.1/8001"
 ```
 (this is the same interface as [statsd](https://github.com/etsy/statsd/), so you can use any statsd client library that supports histograms)
 
-The daemon flushes metrics to the backend server every 30 seconds.
+The daemon flushes metrics to the backend server in 30 second windows.
 
 To query the server, you can use the `query` command line tool:
 ```
