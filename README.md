@@ -48,7 +48,7 @@ Measuring Quantile Error
 
 Caesium includes a command-line tool for measuring the error introduced by its quantile sketching algorithm.
 
-1. Create a text file containing one number per line (unsigned int u64).  For example:
+1. Create a text file containing one number per line (unsigned 64-bit integer).  For example:
 ```
 seq 0 100 > data.txt
 ```
@@ -57,6 +57,12 @@ seq 0 100 > data.txt
 ```
 cargo run --bin quantile data.txt
 ```
+
+This will report:
+* The *normalized rank error* for the 0.1, 0.2, .., 0.8, 0.9 quantiles
+* The number of values stored in the sketch.
+* The size of the (serialized) sketch in bytes.
+* The total time in ms to perform the inserts/merges.
 
 By default, the quantile tool inserts every value from the data file into a single sketch.  You can measure the error introduced by merging sketches by specifying the number of merges.  For example, to split the dataset into ten sketches that are merged:
 ```
