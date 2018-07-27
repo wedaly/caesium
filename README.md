@@ -43,6 +43,27 @@ This starts a read-eval-print-loop you can use to query to the server:
 | `quantile(group(hours, fetch(foo)), 0.5)` | Combine time windows that start within the same hour, then query the combined windows |
 
 
+Measuring Quantile Error
+------------------------
+
+Caesium includes a command-line tool for measuring the error introduced by its quantile sketching algorithm.
+
+1. Create a text file containing one number per line (unsigned int u64).  For example:
+```
+seq 0 100 > data.txt
+```
+
+2. Run the `quantile` tool on the data file:
+```
+cargo run --bin quantile data.txt
+```
+
+By default, the quantile tool inserts every value from the data file into a single sketch.  You can measure the error introduced by merging sketches by specifying the number of merges.  For example, to split the dataset into ten sketches that are merged:
+```
+cargo run --bin quantile data.txt 10
+```
+
+
 Tests
 -----
 
