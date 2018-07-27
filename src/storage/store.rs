@@ -47,7 +47,7 @@ impl MetricStore {
         existing_val: Option<&[u8]>,
         operands: &mut rocksdb::MergeOperands,
     ) -> Option<Vec<u8>> {
-        let mut result =
+        let mut value_opt: Option<StorageValue> =
             existing_val.and_then(|mut bytes| match StorageValue::decode(&mut bytes) {
                 Ok(v) => Some(v),
                 Err(err) => {
@@ -57,25 +57,34 @@ impl MetricStore {
             });
 
         for mut bytes in operands {
-            result = match StorageValue::decode(&mut bytes) {
-                Ok(v1) => match result {
+            value_opt = match StorageValue::decode(&mut bytes) {
+                Ok(v1) => match value_opt {
                     None => Some(v1),
                     Some(v2) => Some(v1.merge(v2)),
                 },
                 Err(err) => {
                     error!("Could not deserialize operand value: {:?}", err);
-                    result
+                    value_opt
                 }
             }
         }
 
-        result.and_then(|v| match v.to_bytes() {
+        let result = value_opt.and_then(|v| match v.to_bytes() {
             Ok(bytes) => Some(bytes),
             Err(err) => {
                 error!("Could not serialize merged value to bytes: {:?}", err);
                 None
             }
-        })
+        });
+
+        // RocksDB will crash if we return `None` from a merge operation
+        // Under normal operation, this should never happen
+        assert!(
+            result.is_some(),
+            "Could not execute merge operation; storage DB is corrupted!"
+        );
+
+        result
     }
 
     fn validate_metric_name(s: &str) -> Result<(), StorageError> {
