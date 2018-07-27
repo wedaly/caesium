@@ -55,9 +55,8 @@ impl Processor {
     fn process_expirations(&mut self, clock: &Clock, output: &Sender<MetricState>) {
         let cutoff_ts = clock.now();
         let perform_check = match self.next_expiration_ts {
-            None => false,
-            Some(ts) if ts > cutoff_ts => false,
-            _ => true,
+            Some(ts) if ts <= cutoff_ts => true,
+            _ => false,
         };
         if !perform_check {
             return;
