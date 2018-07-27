@@ -29,6 +29,7 @@ cargo run --bin query
 ```
 
 This starts a read-eval-print-loop you can use to query to the server:
+
 | query | meaning |
 | ----- | ------- |
 | `quantile(fetch(foo), 0.1, 0.5, 0.9)` | Query the 10th, 50th, and 90th percentiles for each time window in the series "foo" |
