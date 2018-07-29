@@ -36,10 +36,10 @@ pub fn run_server(addr: &SocketAddr, db: MetricStore) -> Result<(), NetworkError
 
 fn handle_connection(socket: TcpStream, db: Arc<MetricStore>) {
     let input_buf = Vec::new();
-    let mut output_buf = Vec::new();
     let handle_conn = io::read_to_end(socket, input_buf)
         .and_then(move |(socket, buf)| {
             let db_ref = db.clone();
+            let mut output_buf = Vec::new();
             process(&buf, &mut output_buf, db_ref);
             io::write_all(socket, output_buf)
         })
