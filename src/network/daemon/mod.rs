@@ -23,7 +23,7 @@ pub fn run_daemon(source_addr: SocketAddr, sink_addr: SocketAddr) -> Result<(), 
     let (processor_out, sender_in) = channel();
     thread::spawn(move || processor_thread(processor_in, processor_out, circuit_ref1));
     thread::spawn(move || sender_thread(client, sender_in, circuit_ref2));
-    info!("Listening on {}", source_addr);
+    info!("Listening on {}, publishing to {}", source_addr, sink_addr);
     listener_thread(socket, listener_out)
 }
 

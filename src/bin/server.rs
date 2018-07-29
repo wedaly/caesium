@@ -1,36 +1,75 @@
 extern crate caesium;
+extern crate clap;
 extern crate env_logger;
 
 use caesium::network::error::NetworkError;
 use caesium::network::server::run_server;
 use caesium::storage::error::StorageError;
 use caesium::storage::store::MetricStore;
-use std::env;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use clap::{App, Arg};
+use std::net::{AddrParseError, SocketAddr};
 
-fn main() -> Result<(), ServerError> {
+fn main() -> Result<(), Error> {
     env_logger::init();
-    let db_name = env::args().nth(1).unwrap_or("db".to_string());
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000);
-    let db = MetricStore::open(&db_name)?;
-    run_server(&addr, db)?;
+    let args = parse_args()?;
+    let db = MetricStore::open(&args.db_name)?;
+    run_server(&args.server_addr, db)?;
     Ok(())
 }
 
 #[derive(Debug)]
-enum ServerError {
+struct Args {
+    db_name: String,
+    server_addr: SocketAddr,
+}
+
+fn parse_args() -> Result<Args, Error> {
+    let matches = App::new("Caesium server")
+        .about("Backend server for storing and querying metric data")
+        .arg(Arg::with_name("DB_NAME")
+            .short("d")
+            .long("db-name")
+            .takes_value(true)
+            .help("Name of the database.  The database directory will be created if it doesn't already exist."))
+        .arg(Arg::with_name("SERVER_ADDR")
+            .short("a")
+            .long("addr")
+            .takes_value(true)
+            .help("IP address and port the server will listen on (defaults to 127.0.0.1:8000)"))
+        .get_matches();
+
+    let db_name = matches.value_of("DB_NAME").unwrap_or("db").to_string();
+    let server_addr = matches
+        .value_of("SERVER_ADDR")
+        .unwrap_or("127.0.0.1:8000")
+        .parse::<SocketAddr>()?;
+    Ok(Args {
+        db_name,
+        server_addr,
+    })
+}
+
+#[derive(Debug)]
+enum Error {
+    AddrParseError(AddrParseError),
     NetworkError(NetworkError),
     StorageError(StorageError),
 }
 
-impl From<NetworkError> for ServerError {
-    fn from(err: NetworkError) -> ServerError {
-        ServerError::NetworkError(err)
+impl From<AddrParseError> for Error {
+    fn from(err: AddrParseError) -> Error {
+        Error::AddrParseError(err)
     }
 }
 
-impl From<StorageError> for ServerError {
-    fn from(err: StorageError) -> ServerError {
-        ServerError::StorageError(err)
+impl From<NetworkError> for Error {
+    fn from(err: NetworkError) -> Error {
+        Error::NetworkError(err)
+    }
+}
+
+impl From<StorageError> for Error {
+    fn from(err: StorageError) -> Error {
+        Error::StorageError(err)
     }
 }

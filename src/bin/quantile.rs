@@ -1,41 +1,18 @@
 extern crate caesium;
+extern crate clap;
 extern crate rand;
+
 use caesium::encode::Encodable;
 use caesium::quantile::error::ErrorCalculator;
 use caesium::quantile::readable::ReadableSketch;
 use caesium::quantile::writable::WritableSketch;
 use caesium::time::timer::Timer;
+use clap::{App, Arg};
 use rand::Rng;
-use std::env;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use std::num::ParseIntError;
-
-#[derive(Debug)]
-enum Error {
-    ArgParseError(&'static str),
-    IOError(io::Error),
-    ParseIntError(ParseIntError),
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::IOError(err)
-    }
-}
-
-impl From<ParseIntError> for Error {
-    fn from(err: ParseIntError) -> Error {
-        Error::ParseIntError(err)
-    }
-}
-
-#[derive(Debug)]
-struct Args {
-    data_path: String,
-    num_merges: usize,
-}
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
@@ -53,17 +30,38 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Debug)]
+struct Args {
+    data_path: String,
+    num_merges: usize,
+}
+
 fn parse_args() -> Result<Args, Error> {
-    let data_path = env::args().nth(1).ok_or(Error::ArgParseError(
-        "Missing required argument `data_path`",
-    ))?;
-    let num_merges = env::args()
-        .nth(2)
-        .map_or(Ok(0), |s| s.parse::<usize>())
-        .map_err(|_| Error::ArgParseError("Could not parse integer for arg `num_merges`"))?;
+    let matches = App::new("Quantile tool")
+        .about("Calculate error and size of quantile sketches (useful for testing)")
+        .arg(
+            Arg::with_name("DATA_PATH")
+            .index(1)
+            .required(true)
+            .help("Path to data file, one unsigned 64-bit integer per line")
+        )
+        .arg(
+            Arg::with_name("NUM_MERGES")
+            .long("num-merges")
+            .short("n")
+            .takes_value(true)
+            .help("If provided, split dataset into NUM_MERGES parts, then merge the parts before querying")
+        )
+        .get_matches();
+
+    let data_path = matches.value_of("DATA_PATH").unwrap().to_string();
+    let num_merges = matches
+        .value_of("NUM_MERGES")
+        .unwrap_or("0")
+        .parse::<usize>()?;
     Ok(Args {
-        data_path: data_path,
-        num_merges: num_merges,
+        data_path,
+        num_merges,
     })
 }
 
@@ -153,5 +151,23 @@ fn summarize_error(calc: &ErrorCalculator, sketch: &mut ReadableSketch) {
             "phi={}, approx={}, lower={}, upper={}, err={}",
             phi, q.approx_value, q.lower_bound, q.upper_bound, err
         );
+    }
+}
+
+#[derive(Debug)]
+enum Error {
+    IOError(io::Error),
+    ParseIntError(ParseIntError),
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IOError(err)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(err: ParseIntError) -> Error {
+        Error::ParseIntError(err)
     }
 }

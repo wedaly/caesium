@@ -67,7 +67,7 @@ This will report:
 
 By default, the quantile tool inserts every value from the data file into a single sketch.  You can measure the error introduced by merging sketches by specifying the number of merges.  For example, to split the dataset into ten sketches that are merged:
 ```
-cargo run --bin quantile data.txt 10
+cargo run --bin quantile data.txt -n 10
 ```
 
 

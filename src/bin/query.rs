@@ -1,16 +1,18 @@
 extern crate caesium;
+extern crate clap;
 
 use caesium::network::client::Client;
 use caesium::network::error::NetworkError;
 use caesium::network::message::Message;
 use caesium::query::result::QueryResult;
+use clap::{App, Arg};
 use std::io::stdin;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{AddrParseError, SocketAddr};
 use std::process::exit;
 
-fn main() -> Result<(), NetworkError> {
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000);
-    let mut client = Client::new(addr);
+fn main() -> Result<(), Error> {
+    let args = parse_args()?;
+    let mut client = Client::new(args.server_addr);
     loop {
         let mut line = String::new();
         match stdin().read_line(&mut line) {
@@ -18,6 +20,29 @@ fn main() -> Result<(), NetworkError> {
             Err(err) => println!("[ERROR] {:?}", err),
         }
     }
+}
+
+#[derive(Debug)]
+struct Args {
+    server_addr: SocketAddr,
+}
+
+fn parse_args() -> Result<Args, Error> {
+    let matches = App::new("Caesium query tool")
+        .about("Query for metric data")
+        .arg(
+            Arg::with_name("SERVER_ADDR")
+                .short("a")
+                .long("addr")
+                .takes_value(true)
+                .help("IP address and port of the backend server (defaults to 127.0.0.1:8000)"),
+        )
+        .get_matches();
+    let server_addr = matches
+        .value_of("SERVER_ADDR")
+        .unwrap_or("127.0.0.1:8000")
+        .parse::<SocketAddr>()?;
+    Ok(Args { server_addr })
 }
 
 fn handle_query(client: &mut Client, q: &str) {
@@ -51,4 +76,22 @@ fn print_results(results: &[QueryResult]) {
 
 fn print_error(error: &str) {
     println!("[ERROR] {}", error);
+}
+
+#[derive(Debug)]
+enum Error {
+    AddrParseError(AddrParseError),
+    NetworkError(NetworkError),
+}
+
+impl From<AddrParseError> for Error {
+    fn from(err: AddrParseError) -> Error {
+        Error::AddrParseError(err)
+    }
+}
+
+impl From<NetworkError> for Error {
+    fn from(err: NetworkError) -> Error {
+        Error::NetworkError(err)
+    }
 }

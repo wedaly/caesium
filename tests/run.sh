@@ -23,7 +23,7 @@ function cleanup {
 }
 
 function background_server {
-    RUST_LOG=caesium=debug $BIN/server testdb &
+    RUST_LOG=caesium=debug $BIN/server --db-name testdb &
     sleep 1
 }
 
