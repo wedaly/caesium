@@ -28,7 +28,7 @@ pub fn run_daemon(source_addr: SocketAddr, sink_addr: SocketAddr) -> Result<(), 
 }
 
 fn shared_circuit() -> (Arc<RwLock<CircuitState>>, Arc<RwLock<CircuitState>>) {
-    let circuit_lock = RwLock::new(CircuitState::new());
+    let circuit_lock = RwLock::new(CircuitState::Closed);
     let circuit_ref1 = Arc::new(circuit_lock);
     let circuit_ref2 = circuit_ref1.clone();
     (circuit_ref1, circuit_ref2)

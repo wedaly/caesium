@@ -29,13 +29,7 @@ pub fn processor_thread(
                 break;
             }
         }
-        circuit_lock
-            .read()
-            .expect("Could not acquire read lock on circuit state")
-            .execute(
-                || p.process_expirations(&clock, &output),
-                || debug!("Circuit open, skipping processing expirations"),
-            );
+        p.process_expirations(&clock, &circuit_lock, &output);
     }
 }
 
@@ -47,7 +41,7 @@ struct Processor {
 }
 
 impl Processor {
-    fn new() -> Processor {
+    pub fn new() -> Processor {
         Processor {
             metric_name_idx: HashMap::new(),
             expiration_queue: BinaryHeap::new(),
@@ -56,7 +50,7 @@ impl Processor {
         }
     }
 
-    fn process_cmd(&mut self, cmd: InsertCmd) {
+    pub fn process_cmd(&mut self, cmd: InsertCmd) {
         debug!("Processing {:?}", cmd);
         match self.metric_name_idx.get(cmd.metric()) {
             None => self.insert(cmd.metric(), cmd.ts(), cmd.value()),
@@ -64,16 +58,59 @@ impl Processor {
         }
     }
 
-    fn process_expirations(&mut self, clock: &Clock, output: &Sender<MetricState>) {
+    pub fn process_expirations(
+        &mut self,
+        clock: &Clock,
+        circuit_lock: &Arc<RwLock<CircuitState>>,
+        output: &Sender<MetricState>,
+    ) {
         let cutoff_ts = clock.now();
-        let perform_check = match self.next_expiration_ts {
-            Some(ts) if ts <= cutoff_ts => true,
-            _ => false,
-        };
-        if !perform_check {
+        if !self.is_time_to_check_expirations(cutoff_ts) {
             return;
         }
 
+        if !self.is_circuit_closed(circuit_lock) {
+            debug!("Circuit is open, skipping expired metrics check");
+            return;
+        }
+
+        self.find_and_expire_metrics(cutoff_ts, output);
+    }
+
+    fn insert(&mut self, metric_name: &str, ts: TimeStamp, value: u64) {
+        let metric_state = MetricState::new(metric_name, ts, value);
+        let metric_id = self.metric_states.insert(metric_state);
+        self.metric_name_idx
+            .insert(metric_name.to_string(), metric_id);
+        self.schedule_expiration(metric_id, ts);
+    }
+
+    fn update(&mut self, metric_id: usize, ts: TimeStamp, value: u64) {
+        let metric_state = self.metric_states
+            .get_mut(metric_id)
+            .expect("Could not retrieve metric state from slab");
+        metric_state.sketch.insert(value);
+        // Possible, though unlikely, that timestamps will be
+        // out-of-order due to clock synchronization
+        metric_state.window_start = min(metric_state.window_start, ts);
+        metric_state.window_end = max(metric_state.window_end, ts);
+    }
+
+    fn schedule_expiration(&mut self, metric_id: usize, ts: TimeStamp) {
+        let expires_ts = ts + EXPIRATION_SECONDS;
+        let expiration = Expiration {
+            expires_ts,
+            metric_id,
+        };
+        self.expiration_queue.push(expiration);
+        self.next_expiration_ts = self.calculate_next_expiration_ts();
+        debug!(
+            "Scheduled expiration for {}, next check scheduled for {:?}",
+            expires_ts, self.next_expiration_ts
+        );
+    }
+
+    fn find_and_expire_metrics(&mut self, cutoff_ts: TimeStamp, output: &Sender<MetricState>) {
         info!("Checking for expired metrics...");
         loop {
             match self.expiration_queue.pop() {
@@ -98,39 +135,6 @@ impl Processor {
         );
     }
 
-    fn insert(&mut self, metric_name: &str, ts: TimeStamp, value: u64) {
-        let metric_state = MetricState::new(metric_name, ts, value);
-        let metric_id = self.metric_states.insert(metric_state);
-        self.metric_name_idx
-            .insert(metric_name.to_string(), metric_id);
-        self.schedule_expiration(metric_id, ts);
-    }
-
-    fn schedule_expiration(&mut self, metric_id: usize, ts: TimeStamp) {
-        let expires_ts = ts + EXPIRATION_SECONDS;
-        let expiration = Expiration {
-            expires_ts,
-            metric_id,
-        };
-        self.expiration_queue.push(expiration);
-        self.next_expiration_ts = self.calculate_next_expiration_ts();
-        debug!(
-            "Scheduled expiration for {}, next check scheduled for {:?}",
-            expires_ts, self.next_expiration_ts
-        );
-    }
-
-    fn update(&mut self, metric_id: usize, ts: TimeStamp, value: u64) {
-        let metric_state = self.metric_states
-            .get_mut(metric_id)
-            .expect("Could not retrieve metric state from slab");
-        metric_state.sketch.insert(value);
-        // Possible, though unlikely, that timestamps will be
-        // out-of-order due to clock synchronization
-        metric_state.window_start = min(metric_state.window_start, ts);
-        metric_state.window_end = max(metric_state.window_end, ts);
-    }
-
     fn expire_metric(&mut self, metric_id: usize, output: &Sender<MetricState>) {
         let metric_state = self.metric_states.remove(metric_id);
         info!("Expiring metric {}", &metric_state.metric_name);
@@ -142,6 +146,23 @@ impl Processor {
 
     fn calculate_next_expiration_ts(&self) -> Option<TimeStamp> {
         self.expiration_queue.peek().map(|x| x.expires_ts)
+    }
+
+    fn is_time_to_check_expirations(&self, cutoff_ts: TimeStamp) -> bool {
+        match self.next_expiration_ts {
+            Some(ts) if ts <= cutoff_ts => true,
+            _ => false,
+        }
+    }
+
+    fn is_circuit_closed(&self, circuit_lock: &Arc<RwLock<CircuitState>>) -> bool {
+        let circuit_state = circuit_lock
+            .read()
+            .expect("Could not acquire read lock on circuit state");
+        match *circuit_state {
+            CircuitState::Closed => true,
+            CircuitState::Open => false,
+        }
     }
 }
 
@@ -181,13 +202,18 @@ mod tests {
         let mut clock = MockClock::new(0);
         let mut p = Processor::new();
         insert("foo:1234|ms", &mut p, &clock);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(EXPIRATION_SECONDS - 1);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![("foo".to_string(), 0, 0, 1)]);
+        assert_expirations(
+            &mut p,
+            &clock,
+            CircuitState::Closed,
+            &vec![("foo".to_string(), 0, 0, 1)],
+        );
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
     }
 
     #[test]
@@ -197,13 +223,18 @@ mod tests {
         insert("foo:1234|ms", &mut p, &clock);
         clock.tick(15);
         insert("foo:4567|ms", &mut p, &clock);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(EXPIRATION_SECONDS - 16);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![("foo".to_string(), 0, 15, 2)]);
+        assert_expirations(
+            &mut p,
+            &clock,
+            CircuitState::Closed,
+            &vec![("foo".to_string(), 0, 15, 2)],
+        );
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
     }
 
     #[test]
@@ -213,17 +244,44 @@ mod tests {
         insert("foo:1234|ms", &mut p, &clock);
         clock.tick(15);
         insert("bar:1234|ms", &mut p, &clock);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(EXPIRATION_SECONDS - 16);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![("foo".to_string(), 0, 0, 1)]);
+        assert_expirations(
+            &mut p,
+            &clock,
+            CircuitState::Closed,
+            &vec![("foo".to_string(), 0, 0, 1)],
+        );
         clock.tick(14);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![("bar".to_string(), 15, 15, 1)]);
+        assert_expirations(
+            &mut p,
+            &clock,
+            CircuitState::Closed,
+            &vec![("bar".to_string(), 15, 15, 1)],
+        );
         clock.tick(1);
-        assert_expirations(&mut p, &clock, &vec![]);
+        assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
+    }
+
+    #[test]
+    fn it_stops_expiring_metrics_while_circuit_is_open() {
+        let mut clock = MockClock::new(0);
+        let mut p = Processor::new();
+        insert("foo:1234|ms", &mut p, &clock);
+        clock.tick(EXPIRATION_SECONDS);
+        assert_expirations(&mut p, &clock, CircuitState::Open, &vec![]);
+        clock.tick(1);
+        insert("foo:4567|ms", &mut p, &clock);
+        assert_expirations(
+            &mut p,
+            &clock,
+            CircuitState::Closed,
+            &vec![("foo".to_string(), 0, EXPIRATION_SECONDS + 1, 2)],
+        );
     }
 
     fn insert(s: &str, p: &mut Processor, clock: &Clock) {
@@ -234,10 +292,12 @@ mod tests {
     fn assert_expirations(
         p: &mut Processor,
         clock: &Clock,
+        circuit_state: CircuitState,
         expected: &[(String, TimeStamp, TimeStamp, usize)],
     ) {
         let (tx, rx) = channel();
-        p.process_expirations(clock, &tx);
+        let circuit_lock = Arc::new(RwLock::new(circuit_state));
+        p.process_expirations(clock, &circuit_lock, &tx);
         drop(tx);
 
         let actual: Vec<(String, TimeStamp, TimeStamp, usize)> = rx.iter()
