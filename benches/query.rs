@@ -7,7 +7,7 @@ use caesium::quantile::writable::WritableSketch;
 use caesium::query::execute::execute_query;
 use caesium::storage::datasource::DataRow;
 use caesium::storage::mock::MockDataSource;
-use caesium::time::TimeWindow;
+use caesium::time::window::TimeWindow;
 
 fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: usize) {
     let mut sketch = WritableSketch::new();
