@@ -1,9 +1,11 @@
+use network::circuit::CircuitState;
 use network::daemon::command::InsertCmd;
 use network::daemon::state::MetricState;
 use slab::Slab;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BinaryHeap, HashMap};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use time::clock::{Clock, SystemClock};
 use time::timestamp::TimeStamp;
@@ -11,7 +13,11 @@ use time::timestamp::TimeStamp;
 const RECV_TIMEOUT: Duration = Duration::from_millis(1000);
 const EXPIRATION_SECONDS: u64 = 30;
 
-pub fn processor_thread(input: Receiver<InsertCmd>, output: Sender<MetricState>) {
+pub fn processor_thread(
+    input: Receiver<InsertCmd>,
+    output: Sender<MetricState>,
+    circuit_lock: Arc<RwLock<CircuitState>>,
+) {
     let clock = SystemClock::new();
     let mut p = Processor::new();
     loop {
@@ -23,7 +29,13 @@ pub fn processor_thread(input: Receiver<InsertCmd>, output: Sender<MetricState>)
                 break;
             }
         }
-        p.process_expirations(&clock, &output);
+        circuit_lock
+            .read()
+            .expect("Could not acquire read lock on circuit state")
+            .execute(
+                || p.process_expirations(&clock, &output),
+                || debug!("Circuit open, skipping processing expirations"),
+            );
     }
 }
 

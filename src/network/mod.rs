@@ -1,3 +1,4 @@
+mod circuit;
 pub mod client;
 pub mod daemon;
 pub mod error;

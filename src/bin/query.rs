@@ -2,6 +2,7 @@ extern crate caesium;
 
 use caesium::network::client::Client;
 use caesium::network::error::NetworkError;
+use caesium::network::message::Message;
 use caesium::query::result::QueryResult;
 use std::io::stdin;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -24,9 +25,12 @@ fn handle_query(client: &mut Client, q: &str) {
         exit(0);
     }
 
-    match client.query(q) {
-        Ok(results) => print_results(&results),
-        Err(err) => println!("[ERROR] {:?}", err),
+    let req = Message::QueryReq(q.to_string());
+    match client.request(&req) {
+        Ok(Message::QuerySuccessResp(results)) => print_results(&results),
+        Ok(Message::ErrorResp(err)) => print_error(&err),
+        Ok(_) => print_error("Unexpected response message type"),
+        Err(err) => print_error(&format!("Unexpected error: {:?}", err)),
     }
 }
 
@@ -43,4 +47,8 @@ fn print_results(results: &[QueryResult]) {
             r.quantile().upper_bound
         );
     }
+}
+
+fn print_error(error: &str) {
+    println!("[ERROR] {}", error);
 }

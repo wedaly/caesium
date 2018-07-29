@@ -2,6 +2,7 @@ extern crate caesium;
 
 use caesium::network::client::Client;
 use caesium::network::error::NetworkError;
+use caesium::network::message::Message;
 use caesium::quantile::writable::WritableSketch;
 use caesium::time::timestamp::TimeStamp;
 use caesium::time::window::TimeWindow;
@@ -23,9 +24,17 @@ fn main() -> Result<(), Error> {
     let args = parse_args()?;
     let sketch = build_sketch(&args.path)?;
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000);
-    let mut client = Client::new(addr);
-    client.insert(args.metric.to_string(), args.window, sketch)?;
-    Ok(())
+    let client = Client::new(addr);
+    let req = Message::InsertReq {
+        metric: args.metric,
+        window: args.window,
+        sketch,
+    };
+    match client.request(&req) {
+        Ok(Message::InsertSuccessResp) => Ok(()),
+        Ok(msg) => Err(Error::UnexpectedRespError(msg)),
+        Err(err) => Err(From::from(err)),
+    }
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -72,6 +81,7 @@ enum Error {
     ArgParseError(&'static str),
     IOError(io::Error),
     ParseIntError(ParseIntError),
+    UnexpectedRespError(Message),
     NetworkError(NetworkError),
 }
 

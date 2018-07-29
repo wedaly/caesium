@@ -5,7 +5,6 @@ use std::io;
 pub enum NetworkError {
     IOError(io::Error),
     EncodableError(EncodableError),
-    ApplicationError(String),
 }
 
 impl From<io::Error> for NetworkError {
