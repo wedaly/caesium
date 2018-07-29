@@ -82,7 +82,12 @@ fn parse_args() -> Result<Args, Error> {
         .value_of("SERVER_ADDR")
         .unwrap_or("127.0.0.1:8000")
         .parse::<SocketAddr>()?;
+
+    if start_ts > end_ts {
+        return Err(Error::ArgError("Start time must be <= end time"));
+    }
     let window = TimeWindow::new(start_ts, end_ts);
+
     Ok(Args {
         metric,
         window,
@@ -112,6 +117,7 @@ enum Error {
     AddrParseError(AddrParseError),
     IOError(io::Error),
     ParseIntError(ParseIntError),
+    ArgError(&'static str),
     UnexpectedRespError(Message),
     NetworkError(NetworkError),
 }

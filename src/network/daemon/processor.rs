@@ -11,15 +11,15 @@ use time::clock::{Clock, SystemClock};
 use time::timestamp::TimeStamp;
 
 const RECV_TIMEOUT: Duration = Duration::from_millis(1000);
-const EXPIRATION_SECONDS: u64 = 30;
 
 pub fn processor_thread(
+    window_size: u64,
     input: Receiver<InsertCmd>,
     output: Sender<MetricState>,
     circuit_lock: Arc<RwLock<CircuitState>>,
 ) {
     let clock = SystemClock::new();
-    let mut p = Processor::new();
+    let mut p = Processor::new(window_size);
     loop {
         match input.recv_timeout(RECV_TIMEOUT) {
             Ok(cmd) => p.process_cmd(cmd),
@@ -34,6 +34,7 @@ pub fn processor_thread(
 }
 
 struct Processor {
+    window_size: u64,
     metric_states: Slab<MetricState>,
     metric_name_idx: HashMap<String, usize>, // metric name to slab ID
     expiration_queue: BinaryHeap<Expiration>,
@@ -41,8 +42,9 @@ struct Processor {
 }
 
 impl Processor {
-    pub fn new() -> Processor {
+    pub fn new(window_size: u64) -> Processor {
         Processor {
+            window_size,
             metric_name_idx: HashMap::new(),
             expiration_queue: BinaryHeap::new(),
             metric_states: Slab::new(),
@@ -97,7 +99,7 @@ impl Processor {
     }
 
     fn schedule_expiration(&mut self, metric_id: usize, ts: TimeStamp) {
-        let expires_ts = ts + EXPIRATION_SECONDS;
+        let expires_ts = ts + self.window_size;
         let expiration = Expiration {
             expires_ts,
             metric_id,
@@ -197,13 +199,15 @@ mod tests {
     use std::sync::mpsc::channel;
     use time::clock::MockClock;
 
+    const WINDOW_SIZE: u64 = 30;
+
     #[test]
     fn it_inserts_new_metric() {
         let mut clock = MockClock::new(0);
-        let mut p = Processor::new();
+        let mut p = Processor::new(WINDOW_SIZE);
         insert("foo:1234|ms", &mut p, &clock);
         assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
-        clock.tick(EXPIRATION_SECONDS - 1);
+        clock.tick(WINDOW_SIZE - 1);
         assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
         assert_expirations(
@@ -219,12 +223,12 @@ mod tests {
     #[test]
     fn it_updates_existing_metric() {
         let mut clock = MockClock::new(0);
-        let mut p = Processor::new();
+        let mut p = Processor::new(WINDOW_SIZE);
         insert("foo:1234|ms", &mut p, &clock);
         clock.tick(15);
         insert("foo:4567|ms", &mut p, &clock);
         assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
-        clock.tick(EXPIRATION_SECONDS - 16);
+        clock.tick(WINDOW_SIZE - 16);
         assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
         assert_expirations(
@@ -240,12 +244,12 @@ mod tests {
     #[test]
     fn it_expires_multiple_metrics() {
         let mut clock = MockClock::new(0);
-        let mut p = Processor::new();
+        let mut p = Processor::new(WINDOW_SIZE);
         insert("foo:1234|ms", &mut p, &clock);
         clock.tick(15);
         insert("bar:1234|ms", &mut p, &clock);
         assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
-        clock.tick(EXPIRATION_SECONDS - 16);
+        clock.tick(WINDOW_SIZE - 16);
         assert_expirations(&mut p, &clock, CircuitState::Closed, &vec![]);
         clock.tick(1);
         assert_expirations(
@@ -270,9 +274,9 @@ mod tests {
     #[test]
     fn it_stops_expiring_metrics_while_circuit_is_open() {
         let mut clock = MockClock::new(0);
-        let mut p = Processor::new();
+        let mut p = Processor::new(WINDOW_SIZE);
         insert("foo:1234|ms", &mut p, &clock);
-        clock.tick(EXPIRATION_SECONDS);
+        clock.tick(WINDOW_SIZE);
         assert_expirations(&mut p, &clock, CircuitState::Open, &vec![]);
         clock.tick(1);
         insert("foo:4567|ms", &mut p, &clock);
@@ -280,7 +284,7 @@ mod tests {
             &mut p,
             &clock,
             CircuitState::Closed,
-            &vec![("foo".to_string(), 0, EXPIRATION_SECONDS + 1, 2)],
+            &vec![("foo".to_string(), 0, WINDOW_SIZE + 1, 2)],
         );
     }
 
