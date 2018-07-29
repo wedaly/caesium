@@ -1,5 +1,6 @@
 use encode::Decodable;
 use quantile::writable::WritableSketch;
+use regex::Regex;
 use rocksdb;
 use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
@@ -88,13 +89,14 @@ impl MetricStore {
     }
 
     fn validate_metric_name(s: &str) -> Result<(), StorageError> {
-        if s.is_empty()
-            || s.chars().next().map(|c| !c.is_ascii_alphabetic()).unwrap()
-            || s.chars().any(|c| !c.is_ascii_alphanumeric())
-        {
-            Err(StorageError::InvalidMetricName)
-        } else {
+        lazy_static! {
+            static ref METRIC_RE: Regex =
+                Regex::new("^[a-zA-Z][a-zA-Z0-9._-]*$").expect("Could not compile regex");
+        }
+        if METRIC_RE.is_match(s) {
             Ok(())
+        } else {
+            Err(StorageError::InvalidMetricName)
         }
     }
 }
@@ -359,11 +361,39 @@ mod tests {
     }
 
     #[test]
+    fn it_accepts_metric_name_with_number() {
+        assert!(MetricStore::validate_metric_name("foo123").is_ok());
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_period() {
+        assert!(MetricStore::validate_metric_name("foo.bar").is_ok());
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_hyphen() {
+        assert!(MetricStore::validate_metric_name("foo-bar").is_ok());
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_underscore() {
+        assert!(MetricStore::validate_metric_name("foo_bar").is_ok());
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_capitals() {
+        assert!(MetricStore::validate_metric_name("FooBar").is_ok());
+    }
+
+    #[test]
     fn it_rejects_invalid_metric_names() {
         assert_eq!(MetricStore::validate_metric_name("").is_ok(), false);
         assert_eq!(MetricStore::validate_metric_name("1").is_ok(), false);
         assert_eq!(MetricStore::validate_metric_name("1foo").is_ok(), false);
         assert_eq!(MetricStore::validate_metric_name("foo&bar").is_ok(), false);
+        assert_eq!(MetricStore::validate_metric_name(".foo").is_ok(), false);
+        assert_eq!(MetricStore::validate_metric_name("_foo").is_ok(), false);
+        assert_eq!(MetricStore::validate_metric_name("-foo").is_ok(), false);
     }
 
     fn with_test_store<T>(test: T) -> ()

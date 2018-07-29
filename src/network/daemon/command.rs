@@ -13,7 +13,7 @@ impl InsertCmd {
     pub fn parse_from_str(s: &str, clock: &Clock) -> Option<InsertCmd> {
         lazy_static! {
             static ref INSERT_CMD_RE: Regex = Regex::new(
-                "(?P<metric>[a-z][a-z0-9]*):(?P<value>[0-9]+)|ms([|].+)?"
+                "^(?P<metric>[a-zA-Z][a-zA-Z0-9._-]*):(?P<value>[0-9]+)[|]ms([|]@[0-9]+[.][0-9]+)?$"
             ).expect("Could not compile regex");
         }
 
@@ -57,8 +57,52 @@ mod tests {
     }
 
     #[test]
-    fn it_ignores_extra_separators() {
+    fn it_ignores_sample_rate() {
         assert_cmd("foo:12345|ms|@0.1", "foo", 12345);
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_numbers() {
+        assert_cmd("foo123:12345|ms", "foo123", 12345);
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_period() {
+        assert_cmd(
+            "region.us.server.abc:12345|ms",
+            "region.us.server.abc",
+            12345,
+        );
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_hyphen() {
+        assert_cmd("us-west:12345|ms", "us-west", 12345);
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_underscore() {
+        assert_cmd("env_prod:12345|ms", "env_prod", 12345);
+    }
+
+    #[test]
+    fn it_accepts_metric_name_with_capital() {
+        assert_cmd("FooBar:12345|ms", "FooBar", 12345);
+    }
+
+    #[test]
+    fn it_rejects_metric_name_starting_with_nonalpha() {
+        assert_invalid(&"1foo:bar|ms");
+        assert_invalid(&".foo:bar|ms");
+        assert_invalid(&"-foo:bar|ms");
+        assert_invalid(&"_foo:bar|ms");
+    }
+
+    #[test]
+    fn it_rejects_partial_match() {
+        assert_invalid("&&&&||||||foo:123|ms||||||&&&&");
+        assert_invalid("foo:123|ms||||||&&&&");
+        assert_invalid("&&&&||||||foo:123|ms");
     }
 
     #[test]

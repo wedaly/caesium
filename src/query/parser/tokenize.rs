@@ -101,7 +101,7 @@ fn tokenize_numeric(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeE
 fn tokenize_symbol(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
     let mut i = 0;
     for c in s.chars() {
-        if c.is_ascii_alphanumeric() {
+        if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
             i += 1;
         } else if is_separator(c) {
             break;
@@ -131,6 +131,34 @@ mod tests {
                 Token::Symbol("world".to_string()),
             ],
         );
+    }
+
+    #[test]
+    fn it_tokenizes_symbols_with_numbers() {
+        assert_tokenize(&"server1234", vec![Token::Symbol("server1234".to_string())]);
+    }
+
+    #[test]
+    fn it_tokenizes_symbols_with_periods() {
+        assert_tokenize(
+            &"region.us.server.abcd",
+            vec![Token::Symbol("region.us.server.abcd".to_string())],
+        );
+    }
+
+    #[test]
+    fn it_tokenizes_symbols_with_hyphens() {
+        assert_tokenize(&"us-west", vec![Token::Symbol("us-west".to_string())]);
+    }
+
+    #[test]
+    fn it_tokenizes_symbols_with_underscores() {
+        assert_tokenize(&"env_prod", vec![Token::Symbol("env_prod".to_string())]);
+    }
+
+    #[test]
+    fn it_tokenizes_symbols_with_capitals() {
+        assert_tokenize(&"FooBar", vec![Token::Symbol("FooBar".to_string())]);
     }
 
     #[test]
