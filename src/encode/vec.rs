@@ -39,8 +39,3 @@ build_encodable_vec_type!(u16);
 build_encodable_vec_type!(u32);
 build_encodable_vec_type!(u64);
 build_encodable_vec_type!(usize);
-build_encodable_vec_type!(Vec<u8>);
-build_encodable_vec_type!(Vec<u16>);
-build_encodable_vec_type!(Vec<u32>);
-build_encodable_vec_type!(Vec<u64>);
-build_encodable_vec_type!(Vec<usize>);
