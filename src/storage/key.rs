@@ -2,7 +2,7 @@ use encode::{Decodable, Encodable, EncodableError};
 use std::io::Read;
 use time::timestamp::TimeStamp;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct StorageKey {
     metric: String,
     window_start: TimeStamp,

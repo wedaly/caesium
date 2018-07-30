@@ -2,6 +2,7 @@ use encode::Decodable;
 use quantile::writable::WritableSketch;
 use regex::Regex;
 use rocksdb;
+use std::cmp::Ordering;
 use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
@@ -18,6 +19,7 @@ impl MetricStore {
     pub fn open(path: &str) -> Result<MetricStore, StorageError> {
         let mut opts = rocksdb::Options::default();
         opts.create_if_missing(true);
+        opts.set_comparator("key_comparator", MetricStore::compare_keys);
         opts.set_merge_operator("sketch_merger", MetricStore::merge_op, None);
         let raw_db = rocksdb::DB::open(&opts, path)?;
         Ok(MetricStore { raw_db })
@@ -41,6 +43,12 @@ impl MetricStore {
         debug!("Inserted key for metric {} and window {:?}", metric, window);
         self.raw_db.merge(&key, &val)?;
         Ok(())
+    }
+
+    fn compare_keys(mut x: &[u8], mut y: &[u8]) -> Ordering {
+        let k1 = StorageKey::decode(&mut x).expect("Could not decode storage key");
+        let k2 = StorageKey::decode(&mut y).expect("Could not decode storage key");
+        k1.cmp(&k2)
     }
 
     fn merge_op(

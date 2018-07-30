@@ -62,7 +62,7 @@ fn parse_args() -> Result<Args, Error> {
         .parse::<u64>()?;
 
     if window_size < 1 {
-        return Err(Error::ArgError("Window size must be >= 1"))
+        return Err(Error::ArgError("Window size must be >= 1"));
     }
 
     Ok(Args {
