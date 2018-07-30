@@ -6,6 +6,7 @@ pub enum StorageError {
     EncodableError(EncodableError),
     DatabaseError(rocksdb::Error),
     InvalidMetricName,
+    InternalError(&'static str),
 }
 
 impl From<rocksdb::Error> for StorageError {

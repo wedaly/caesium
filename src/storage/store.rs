@@ -141,54 +141,44 @@ impl MetricCursor {
         }
     }
 
-    fn read_db_key(raw_iter: &rocksdb::DBRawIterator) -> Option<StorageKey> {
+    fn read_db_key(raw_iter: &rocksdb::DBRawIterator) -> Result<StorageKey, StorageError> {
         assert!(raw_iter.valid());
         unsafe {
             // OK because we don't seek the iterator after retrieving the inner key
             raw_iter
                 .key_inner()
-                .and_then(|mut bytes| match StorageKey::decode(&mut bytes) {
-                    Ok(key) => Some(key),
-                    Err(err) => {
-                        error!("Could not decode key: {:?}", err);
-                        None
-                    }
-                })
+                .ok_or(StorageError::InternalError("Retrieved key is empty"))
+                .and_then(|mut bytes| StorageKey::decode(&mut bytes).map_err(From::from))
         }
     }
 
-    fn read_db_value(raw_iter: &rocksdb::DBRawIterator) -> Option<StorageValue> {
+    fn read_db_value(raw_iter: &rocksdb::DBRawIterator) -> Result<StorageValue, StorageError> {
         assert!(raw_iter.valid());
         unsafe {
             // OK because we don't seek the iterator after retrieving the inner value
             raw_iter
                 .value_inner()
-                .and_then(|mut bytes| match StorageValue::decode(&mut bytes) {
-                    Ok(val) => Some(val),
-                    Err(err) => {
-                        error!("Could not decode value: {:?}", err);
-                        None
-                    }
-                })
+                .ok_or(StorageError::InternalError("Retrieved value is empty"))
+                .and_then(|mut bytes| StorageValue::decode(&mut bytes).map_err(From::from))
         }
     }
 }
 
 impl DataCursor for MetricCursor {
     fn get_next(&mut self) -> Result<Option<DataRow>, StorageError> {
-        let val_opt = if self.raw_iter.valid() {
+        let result = if self.raw_iter.valid() {
             MetricCursor::read_db_key(&self.raw_iter).and_then(|key| {
                 if key.metric() == self.metric && key.window_start() < self.end {
-                    MetricCursor::read_db_value(&self.raw_iter)
+                    MetricCursor::read_db_value(&self.raw_iter).map(|val| Some(val.to_data_row()))
                 } else {
-                    None
+                    Ok(None)
                 }
             })
         } else {
-            None
+            Ok(None)
         };
         self.raw_iter.next();
-        Ok(val_opt.map(|v| v.to_data_row()))
+        result
     }
 }
 
