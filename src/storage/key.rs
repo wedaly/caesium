@@ -17,6 +17,17 @@ impl StorageKey {
         Ok(buf)
     }
 
+    pub fn with_window_start(self, window_start: TimeStamp) -> StorageKey {
+        StorageKey {
+            metric: self.metric,
+            window_start,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, EncodableError> {
+        StorageKey::as_bytes(&self.metric, self.window_start)
+    }
+
     pub fn metric(&self) -> &str {
         &self.metric
     }

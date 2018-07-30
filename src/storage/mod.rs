@@ -1,4 +1,5 @@
 pub mod datasource;
+pub mod downsample;
 pub mod error;
 mod key;
 pub mod mock;

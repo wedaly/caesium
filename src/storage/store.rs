@@ -4,6 +4,7 @@ use regex::Regex;
 use rocksdb;
 use std::cmp::Ordering;
 use storage::datasource::{DataCursor, DataRow, DataSource};
+use storage::downsample::{DownsampleAction, DownsampleStrategy};
 use storage::error::StorageError;
 use storage::key::StorageKey;
 use storage::value::StorageValue;
@@ -41,6 +42,51 @@ impl MetricStore {
         let val = StorageValue::as_bytes(window, sketch)?;
         debug!("Inserted key for metric {} and window {:?}", metric, window);
         self.raw_db.merge(&key, &val)?;
+        Ok(())
+    }
+
+    pub fn downsample<T>(&self, strategy: &T) -> Result<(), StorageError>
+    where
+        T: DownsampleStrategy,
+    {
+        let snapshot = self.raw_db.snapshot();
+        let mut iter = snapshot.raw_iterator();
+        iter.seek_to_first();
+        while iter.valid() {
+            let key = MetricCursor::read_db_key(&iter)?;
+            let val = MetricCursor::read_db_value(&iter)?;
+            match strategy.get_action(val.window()) {
+                DownsampleAction::Ignore => {
+                    debug!("Ignored key during downsampling: {:?}", key);
+                }
+                DownsampleAction::Discard => {
+                    debug!("Deleting key during downsampling: {:?}", key);
+                    let key_bytes = key.to_bytes()?;
+                    self.raw_db.delete(&key_bytes)?;
+                }
+                DownsampleAction::ExpandWindow(new_window) => {
+                    debug!(
+                        "Expanding window for key {:?} during downsampling: \
+                         old_window={:?}, new_window={:?}",
+                        key,
+                        val.window(),
+                        new_window
+                    );
+                    let mut batch = rocksdb::WriteBatch::default();
+                    let old_key_bytes = key.to_bytes()?;
+                    batch.delete(&old_key_bytes)?;
+
+                    let new_key = key.with_window_start(new_window.start());
+                    let key_bytes = new_key.to_bytes()?;
+                    let new_val = val.with_window(new_window);
+                    let val_bytes = new_val.to_bytes()?;
+                    batch.merge(&key_bytes, &val_bytes)?;
+
+                    self.raw_db.write(batch)?;
+                }
+            }
+            iter.next();
+        }
         Ok(())
     }
 
@@ -423,6 +469,91 @@ mod tests {
         assert_eq!(MetricStore::validate_metric_name("-foo").is_ok(), false);
     }
 
+    #[test]
+    fn it_handles_downsample_action_ignore() {
+        with_test_store(|store| {
+            store
+                .insert(&"foo", TimeWindow::new(0, 30), build_sketch())
+                .expect("Could not insert sketch");
+
+            let ignore_strategy = MockStrategy::new(DownsampleAction::Ignore);
+            store
+                .downsample(&ignore_strategy)
+                .expect("Could not downsample");
+            let mut cursor = store
+                .fetch_range(&"foo", None, None)
+                .expect("Could not fetch range");
+            let first_row = cursor.get_next().expect("Could not get first row");
+            assert_row(first_row, 0, 30, 50);
+        })
+    }
+
+    #[test]
+    fn it_handles_downsample_action_discard() {
+        with_test_store(|store| {
+            store
+                .insert(&"foo", TimeWindow::new(0, 30), build_sketch())
+                .expect("Could not insert sketch");
+
+            let discard_strategy = MockStrategy::new(DownsampleAction::Discard);
+            store
+                .downsample(&discard_strategy)
+                .expect("Could not downsample");
+            let mut cursor = store
+                .fetch_range(&"foo", None, None)
+                .expect("Could not fetch range");
+            let first_row = cursor.get_next().expect("Could not get first row");
+            assert!(first_row.is_none());
+        })
+    }
+
+    #[test]
+    fn it_handles_downsample_action_update_window() {
+        with_test_store(|store| {
+            store
+                .insert(&"foo", TimeWindow::new(10, 20), build_sketch())
+                .expect("Could not insert sketch");
+
+            let new_window = TimeWindow::new(0, 30);
+            let action = DownsampleAction::ExpandWindow(new_window);
+            let expand_strategy = MockStrategy::new(action);
+            store
+                .downsample(&expand_strategy)
+                .expect("Could not downsample");
+            let mut cursor = store
+                .fetch_range(&"foo", None, None)
+                .expect("Could not fetch range");
+            let first_row = cursor.get_next().expect("Could not get first row");
+            assert_row(first_row, 0, 30, 50);
+        })
+    }
+
+    #[test]
+    fn it_handles_downsample_action_update_window_with_merge() {
+        with_test_store(|store| {
+            store
+                .insert(&"foo", TimeWindow::new(10, 20), build_sketch())
+                .expect("Could not insert sketch");
+            store
+                .insert(&"foo", TimeWindow::new(20, 30), build_sketch())
+                .expect("Could not insert sketch");
+
+            let new_window = TimeWindow::new(0, 30);
+            let action = DownsampleAction::ExpandWindow(new_window);
+            let expand_strategy = MockStrategy::new(action);
+            store
+                .downsample(&expand_strategy)
+                .expect("Could not downsample");
+            let mut cursor = store
+                .fetch_range(&"foo", None, None)
+                .expect("Could not fetch range");
+            let first_row = cursor.get_next().expect("Could not get first row");
+            assert_row(first_row, 0, 30, 50);
+            let second_row = cursor.get_next().expect("Could not get second row");
+            assert!(second_row.is_none());
+        })
+    }
+
     fn with_test_store<T>(test: T) -> ()
     where
         T: FnOnce(MetricStore) -> () + panic::UnwindSafe,
@@ -460,6 +591,22 @@ mod tests {
             assert_eq!(val, median);
         } else {
             panic!("Expected a row, but got None!");
+        }
+    }
+
+    struct MockStrategy {
+        action: DownsampleAction,
+    }
+
+    impl MockStrategy {
+        fn new(action: DownsampleAction) -> MockStrategy {
+            MockStrategy { action }
+        }
+    }
+
+    impl DownsampleStrategy for MockStrategy {
+        fn get_action(&self, _: TimeWindow) -> DownsampleAction {
+            self.action.clone()
         }
     }
 }

@@ -22,6 +22,10 @@ impl StorageValue {
         Ok(buf)
     }
 
+    pub fn with_window(self, new_window: TimeWindow) -> StorageValue {
+        StorageValue::new(new_window, self.sketch)
+    }
+
     pub fn to_bytes(&self) -> Result<Vec<u8>, EncodableError> {
         let mut buf = Vec::new();
         self.encode(&mut buf)?;
@@ -41,6 +45,10 @@ impl StorageValue {
         let window = TimeWindow::new(start, end);
         let sketch = self.sketch.merge(other.sketch);
         StorageValue::new(window, sketch)
+    }
+
+    pub fn window(&self) -> TimeWindow {
+        self.window
     }
 }
 
