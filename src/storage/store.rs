@@ -3,7 +3,6 @@ use quantile::writable::WritableSketch;
 use regex::Regex;
 use rocksdb;
 use std::cmp::Ordering;
-use std::io::Cursor;
 use storage::datasource::{DataCursor, DataRow, DataSource};
 use storage::error::StorageError;
 use storage::key::StorageKey;
@@ -119,47 +118,77 @@ impl DataSource for MetricStore {
         MetricStore::validate_metric_name(metric)?;
         let ts = start.unwrap_or(0);
         let end_ts = end.unwrap_or(u64::max_value());
-        let prefix = StorageKey::as_bytes(metric, ts)?;
-        let raw_iter = self.raw_db.prefix_iterator(&prefix);
+        let start_key = StorageKey::as_bytes(metric, ts)?;
+        let mut raw_iter = self.raw_db.raw_iterator();
+        raw_iter.seek(&start_key);
         let cursor = MetricCursor::new(raw_iter, metric.to_string(), end_ts);
         Ok(Box::new(cursor))
     }
 }
 
 pub struct MetricCursor {
-    raw_iter: rocksdb::DBIterator,
+    raw_iter: rocksdb::DBRawIterator,
     metric: String,
     end: TimeStamp,
 }
 
 impl MetricCursor {
-    fn new(raw_iter: rocksdb::DBIterator, metric: String, end: TimeStamp) -> MetricCursor {
+    fn new(raw_iter: rocksdb::DBRawIterator, metric: String, end: TimeStamp) -> MetricCursor {
         MetricCursor {
             raw_iter,
             metric,
             end,
         }
     }
+
+    fn read_db_key(raw_iter: &rocksdb::DBRawIterator) -> Option<StorageKey> {
+        assert!(raw_iter.valid());
+        unsafe {
+            // OK because we don't seek the iterator after retrieving the inner key
+            raw_iter
+                .key_inner()
+                .and_then(|mut bytes| match StorageKey::decode(&mut bytes) {
+                    Ok(key) => Some(key),
+                    Err(err) => {
+                        error!("Could not decode key: {:?}", err);
+                        None
+                    }
+                })
+        }
+    }
+
+    fn read_db_value(raw_iter: &rocksdb::DBRawIterator) -> Option<StorageValue> {
+        assert!(raw_iter.valid());
+        unsafe {
+            // OK because we don't seek the iterator after retrieving the inner value
+            raw_iter
+                .value_inner()
+                .and_then(|mut bytes| match StorageValue::decode(&mut bytes) {
+                    Ok(val) => Some(val),
+                    Err(err) => {
+                        error!("Could not decode value: {:?}", err);
+                        None
+                    }
+                })
+        }
+    }
 }
 
 impl DataCursor for MetricCursor {
     fn get_next(&mut self) -> Result<Option<DataRow>, StorageError> {
-        let row_opt = match self.raw_iter.next() {
-            None => None,
-            Some((key, val)) => {
-                let mut key_reader = Cursor::new(key);
-                let key = StorageKey::decode(&mut key_reader)?;
-                if key.metric() != self.metric || key.window_start() >= self.end {
-                    None
+        let val_opt = if self.raw_iter.valid() {
+            MetricCursor::read_db_key(&self.raw_iter).and_then(|key| {
+                if key.metric() == self.metric && key.window_start() < self.end {
+                    MetricCursor::read_db_value(&self.raw_iter)
                 } else {
-                    debug!("Fetching key {:?}", key);
-                    let mut val_reader = Cursor::new(val);
-                    let val = StorageValue::decode(&mut val_reader)?;
-                    Some(val.to_data_row())
+                    None
                 }
-            }
+            })
+        } else {
+            None
         };
-        Ok(row_opt)
+        self.raw_iter.next();
+        Ok(val_opt.map(|v| v.to_data_row()))
     }
 }
 
