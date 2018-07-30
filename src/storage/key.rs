@@ -40,3 +40,38 @@ where
         Ok(key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_orders_by_metric_and_timestamp() {
+        let mut keys: Vec<StorageKey> = vec![
+            key(&"bcd", 2),
+            key(&"a", 0),
+            key(&"a", 1),
+            key(&"aa", 1),
+            key(&"bcd", 0),
+            key(&"bcd", 3),
+            key(&"aa", 0),
+        ];
+        keys.sort();
+        assert_eq!(keys, vec![
+            key(&"a", 0),
+            key(&"a", 1),
+            key(&"aa", 0),
+            key(&"aa", 1),
+            key(&"bcd", 0),
+            key(&"bcd", 2),
+            key(&"bcd", 3),
+        ]);
+    }
+
+    fn key(metric: &str, window_start: TimeStamp) -> StorageKey {
+        StorageKey {
+            metric: metric.to_string(),
+            window_start
+        }
+    }
+}
