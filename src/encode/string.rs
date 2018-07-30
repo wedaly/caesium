@@ -6,7 +6,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        self.as_bytes().to_vec().encode(writer)
+        self.as_bytes().encode(writer)
     }
 }
 
@@ -15,7 +15,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        self.as_bytes().to_vec().encode(writer)
+        self.as_bytes().encode(writer)
     }
 }
 

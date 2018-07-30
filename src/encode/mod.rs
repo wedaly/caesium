@@ -1,4 +1,5 @@
 pub mod int;
+pub mod slice;
 pub mod string;
 pub mod vbyte;
 
