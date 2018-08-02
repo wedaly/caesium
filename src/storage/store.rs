@@ -3,13 +3,18 @@ use quantile::writable::WritableSketch;
 use regex::Regex;
 use rocksdb;
 use std::cmp::Ordering;
+use std::str;
 use storage::datasource::{DataRow, DataSource};
 use storage::downsample::{DownsampleAction, DownsampleStrategy};
 use storage::error::StorageError;
 use storage::key::StorageKey;
 use storage::value::StorageValue;
+use storage::wildcard::{exact_prefix, wildcard_match};
 use time::timestamp::TimeStamp;
 use time::window::TimeWindow;
+
+const WINDOWS_CF_NAME: &'static str = "windows";
+const METRICS_CF_NAME: &'static str = "metrics";
 
 pub struct MetricStore {
     raw_db: rocksdb::DB,
@@ -17,11 +22,14 @@ pub struct MetricStore {
 
 impl MetricStore {
     pub fn open(path: &str) -> Result<MetricStore, StorageError> {
+        let column_families = vec![
+            MetricStore::windows_cf_desc(),
+            MetricStore::metrics_cf_desc(),
+        ];
         let mut opts = rocksdb::Options::default();
         opts.create_if_missing(true);
-        opts.set_comparator("key_comparator", MetricStore::compare_keys);
-        opts.set_merge_operator("sketch_merger", MetricStore::merge_op, None);
-        let raw_db = rocksdb::DB::open(&opts, path)?;
+        opts.create_missing_column_families(true);
+        let raw_db = rocksdb::DB::open_cf_descriptors(&opts, path, column_families)?;
         Ok(MetricStore { raw_db })
     }
 
@@ -40,8 +48,14 @@ impl MetricStore {
         MetricStore::validate_metric_name(metric)?;
         let key = StorageKey::as_bytes(metric, window.start())?;
         let val = StorageValue::as_bytes(window, sketch)?;
-        debug!("Inserted key for metric {} and window {:?}", metric, window);
-        self.raw_db.merge(&key, &val)?;
+        debug!(
+            "Inserting key for metric {} and window {:?}",
+            metric, window
+        );
+        let mut batch = rocksdb::WriteBatch::default();
+        batch.put_cf(self.metrics_cf()?, metric.as_bytes(), &[1u8; 0])?;
+        batch.merge_cf(self.windows_cf()?, &key, &val)?;
+        self.raw_db.write(batch)?;
         Ok(())
     }
 
@@ -50,7 +64,8 @@ impl MetricStore {
         T: DownsampleStrategy,
     {
         let snapshot = self.raw_db.snapshot();
-        let kv_iter = snapshot.iterator(rocksdb::IteratorMode::Start);
+        let cf = self.windows_cf()?;
+        let kv_iter = snapshot.iterator_cf(cf, rocksdb::IteratorMode::Start)?;
         for (key_bytes, val_bytes) in kv_iter {
             let key = StorageKey::decode(&mut &key_bytes[..])?;
             let val = StorageValue::decode(&mut &val_bytes[..])?;
@@ -61,7 +76,7 @@ impl MetricStore {
                 DownsampleAction::Discard => {
                     debug!("Deleting key during downsampling: {:?}", key);
                     let key_bytes = key.to_bytes()?;
-                    self.raw_db.delete(&key_bytes)?;
+                    self.raw_db.delete_cf(cf, &key_bytes)?;
                 }
                 DownsampleAction::ExpandWindow(new_window) => {
                     debug!(
@@ -73,19 +88,47 @@ impl MetricStore {
                     );
                     let mut batch = rocksdb::WriteBatch::default();
                     let old_key_bytes = key.to_bytes()?;
-                    batch.delete(&old_key_bytes)?;
+                    batch.delete_cf(cf, &old_key_bytes)?;
 
                     let new_key = key.with_window_start(new_window.start());
                     let key_bytes = new_key.to_bytes()?;
                     let new_val = val.with_window(new_window);
                     let val_bytes = new_val.to_bytes()?;
-                    batch.merge(&key_bytes, &val_bytes)?;
+                    batch.merge_cf(cf, &key_bytes, &val_bytes)?;
 
                     self.raw_db.write(batch)?;
                 }
             }
         }
         Ok(())
+    }
+
+    fn windows_cf_desc() -> rocksdb::ColumnFamilyDescriptor {
+        let mut opts = rocksdb::Options::default();
+        opts.set_comparator("key_comparator", MetricStore::compare_keys);
+        opts.set_merge_operator("sketch_merger", MetricStore::merge_op, None);
+        rocksdb::ColumnFamilyDescriptor::new(WINDOWS_CF_NAME, opts)
+    }
+
+    fn metrics_cf_desc() -> rocksdb::ColumnFamilyDescriptor {
+        let opts = rocksdb::Options::default();
+        rocksdb::ColumnFamilyDescriptor::new(METRICS_CF_NAME, opts)
+    }
+
+    fn windows_cf(&self) -> Result<rocksdb::ColumnFamily, StorageError> {
+        self.raw_db
+            .cf_handle(WINDOWS_CF_NAME)
+            .ok_or(StorageError::InternalError(
+                "Could not open windows column family",
+            ))
+    }
+
+    fn metrics_cf(&self) -> Result<rocksdb::ColumnFamily, StorageError> {
+        self.raw_db
+            .cf_handle(METRICS_CF_NAME)
+            .ok_or(StorageError::InternalError(
+                "Could not open metrics column family",
+            ))
     }
 
     fn compare_keys(mut x: &[u8], mut y: &[u8]) -> Ordering {
@@ -153,21 +196,19 @@ impl MetricStore {
 }
 
 impl DataSource for MetricStore {
-    fn fetch_range<'a>(
+    fn fetch<'a>(
         &'a self,
-        metric: &str,
+        metric: String,
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,
     ) -> Result<Box<Iterator<Item = DataRow> + 'a>, StorageError> {
-        MetricStore::validate_metric_name(metric)?;
+        MetricStore::validate_metric_name(&metric)?;
         let ts = start.unwrap_or(0);
         let end_ts = end.unwrap_or(u64::max_value());
-        let start_key = StorageKey::as_bytes(metric, ts)?;
-        let metric = metric.to_string();
-        let kv_iter = self.raw_db.iterator(rocksdb::IteratorMode::From(
-            &start_key,
-            rocksdb::Direction::Forward,
-        ));
+        let start_key = StorageKey::as_bytes(&metric, ts)?;
+        let cf = self.windows_cf()?;
+        let kv_iter_mode = rocksdb::IteratorMode::From(&start_key, rocksdb::Direction::Forward);
+        let kv_iter = self.raw_db.iterator_cf(cf, kv_iter_mode)?;
         let iter = kv_iter
             .filter_map(
                 |(key_bytes, val_bytes)| match StorageKey::decode(&mut &key_bytes[..]) {
@@ -190,6 +231,33 @@ impl DataSource for MetricStore {
             );
         Ok(Box::new(iter))
     }
+
+    fn search<'a>(
+        &'a self,
+        pattern: String,
+    ) -> Result<Box<Iterator<Item = String> + 'a>, StorageError> {
+        let prefix_str = exact_prefix(&pattern);
+        let kv_iter_mode =
+            rocksdb::IteratorMode::From(prefix_str.as_bytes(), rocksdb::Direction::Forward);
+        let prefix_bytes = prefix_str.as_bytes().to_vec();
+        let kv_iter = self.raw_db.iterator_cf(self.metrics_cf()?, kv_iter_mode)?;
+        let metric_iter = kv_iter
+            .take_while(move |(key, _)| key.starts_with(&prefix_bytes))
+            .filter_map(move |(key, _)| match str::from_utf8(&*key) {
+                Ok(metric) => {
+                    if wildcard_match(metric, &pattern) {
+                        Some(metric.to_string())
+                    } else {
+                        None
+                    }
+                }
+                Err(err) => {
+                    error!("Could not decode metric name: {:?}", err);
+                    None
+                }
+            });
+        Ok(Box::new(metric_iter))
+    }
 }
 
 #[cfg(test)]
@@ -203,7 +271,7 @@ mod tests {
     fn it_fetches_no_result() {
         with_test_store(|store| {
             let mut row_iter = store
-                .fetch_range(&"ghost", None, None)
+                .fetch("ghost".to_string(), None, None)
                 .expect("Could not fetch range");
             for _ in 0..5 {
                 let next_row = row_iter.next();
@@ -215,12 +283,12 @@ mod tests {
     #[test]
     fn it_stores_and_fetches_sketch() {
         with_test_store(|store| {
-            let metric = "foo";
+            let metric = "foo".to_string();
             store
                 .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&metric, None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 30, 50)]);
@@ -230,7 +298,7 @@ mod tests {
     #[test]
     fn it_fetches_by_metric() {
         with_test_store(|store| {
-            let metric = "foo";
+            let metric = "foo".to_string();
             store
                 .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
@@ -238,7 +306,7 @@ mod tests {
                 .insert(&"bar", TimeWindow::new(60, 90), build_sketch())
                 .expect("Could not insert sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&metric, None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 30, 50)]);
@@ -248,20 +316,21 @@ mod tests {
     #[test]
     fn it_fetches_select_by_time_range() {
         with_test_store(|store| {
+            let metric = "foo".to_string();
             store
-                .insert(&"foo", TimeWindow::new(0, 30), build_sketch())
+                .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&"foo", TimeWindow::new(30, 60), build_sketch())
+                .insert(&metric, TimeWindow::new(30, 60), build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&"foo", TimeWindow::new(60, 90), build_sketch())
+                .insert(&metric, TimeWindow::new(60, 90), build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&"foo", TimeWindow::new(90, 120), build_sketch())
+                .insert(&metric, TimeWindow::new(90, 120), build_sketch())
                 .expect("Could not insert sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&"foo", Some(30), Some(90))
+                .fetch(metric, Some(30), Some(90))
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(30, 60, 50), (60, 90, 50)]);
@@ -271,7 +340,7 @@ mod tests {
     #[test]
     fn it_fetches_by_metric_sequential_name_same_timestamp() {
         with_test_store(|store| {
-            let (m1, m2) = ("m1", "m2");
+            let (m1, m2) = ("m1".to_string(), "m2".to_string());
             store
                 .insert(&m1, TimeWindow::new(30, 60), build_sketch())
                 .expect("Could not insert first sketch");
@@ -279,7 +348,7 @@ mod tests {
                 .insert(&m2, TimeWindow::new(30, 60), build_sketch())
                 .expect("Could not insert second sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&m1, None, None)
+                .fetch(m1, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(30, 60, 50)]);
@@ -289,7 +358,7 @@ mod tests {
     #[test]
     fn it_fetches_by_time_range() {
         with_test_store(|store| {
-            let metric = "foo";
+            let metric = "foo".to_string();
             store
                 .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
@@ -303,7 +372,7 @@ mod tests {
                 .insert(&metric, TimeWindow::new(180, 210), build_sketch())
                 .expect("Could not insert sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&metric, Some(85), Some(150))
+                .fetch(metric, Some(85), Some(150))
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(90, 120, 50), (120, 150, 50)]);
@@ -313,7 +382,7 @@ mod tests {
     #[test]
     fn it_merges_sketches_in_same_time_window() {
         with_test_store(|store| {
-            let metric = "foo";
+            let metric = "foo".to_string();
             store
                 .insert(
                     &metric,
@@ -329,7 +398,7 @@ mod tests {
                 )
                 .expect("Could not insert second sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&metric, None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 30, 2)]);
@@ -339,7 +408,7 @@ mod tests {
     #[test]
     fn it_merges_sketches_with_overlapping_time_windows() {
         with_test_store(|store| {
-            let metric = "foo";
+            let metric = "foo".to_string();
             store
                 .insert(
                     &metric,
@@ -355,7 +424,7 @@ mod tests {
                 )
                 .expect("Could not insert second sketch");
             let rows: Vec<DataRow> = store
-                .fetch_range(&metric, None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 90, 2)]);
@@ -374,7 +443,7 @@ mod tests {
 
     #[test]
     fn it_validates_metric_name_on_fetch() {
-        with_test_store(|store| match store.fetch_range(&"", None, None) {
+        with_test_store(|store| match store.fetch("".to_string(), None, None) {
             Err(StorageError::InvalidMetricName) => {}
             _ => panic!("Expected invalid metric name error"),
         })
@@ -419,8 +488,9 @@ mod tests {
     #[test]
     fn it_handles_downsample_action_ignore() {
         with_test_store(|store| {
+            let metric = "foo".to_string();
             store
-                .insert(&"foo", TimeWindow::new(0, 30), build_sketch())
+                .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
 
             let ignore_strategy = MockStrategy::new(DownsampleAction::Ignore);
@@ -428,7 +498,7 @@ mod tests {
                 .downsample(&ignore_strategy)
                 .expect("Could not downsample");
             let rows: Vec<DataRow> = store
-                .fetch_range(&"foo", None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 30, 50)]);
@@ -438,8 +508,9 @@ mod tests {
     #[test]
     fn it_handles_downsample_action_discard() {
         with_test_store(|store| {
+            let metric = "foo".to_string();
             store
-                .insert(&"foo", TimeWindow::new(0, 30), build_sketch())
+                .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
 
             let discard_strategy = MockStrategy::new(DownsampleAction::Discard);
@@ -447,7 +518,7 @@ mod tests {
                 .downsample(&discard_strategy)
                 .expect("Could not downsample");
             let rows: Vec<DataRow> = store
-                .fetch_range(&"foo", None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert!(rows.is_empty());
@@ -457,8 +528,9 @@ mod tests {
     #[test]
     fn it_handles_downsample_action_update_window() {
         with_test_store(|store| {
+            let metric = "foo".to_string();
             store
-                .insert(&"foo", TimeWindow::new(10, 20), build_sketch())
+                .insert(&metric, TimeWindow::new(10, 20), build_sketch())
                 .expect("Could not insert sketch");
 
             let new_window = TimeWindow::new(0, 30);
@@ -468,7 +540,7 @@ mod tests {
                 .downsample(&expand_strategy)
                 .expect("Could not downsample");
             let rows: Vec<DataRow> = store
-                .fetch_range(&"foo", None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 30, 50)]);
@@ -478,11 +550,12 @@ mod tests {
     #[test]
     fn it_handles_downsample_action_update_window_with_merge() {
         with_test_store(|store| {
+            let metric = "foo".to_string();
             store
-                .insert(&"foo", TimeWindow::new(10, 20), build_sketch())
+                .insert(&metric, TimeWindow::new(10, 20), build_sketch())
                 .expect("Could not insert sketch");
             store
-                .insert(&"foo", TimeWindow::new(20, 30), build_sketch())
+                .insert(&metric, TimeWindow::new(20, 30), build_sketch())
                 .expect("Could not insert sketch");
 
             let new_window = TimeWindow::new(0, 30);
@@ -492,10 +565,73 @@ mod tests {
                 .downsample(&expand_strategy)
                 .expect("Could not downsample");
             let rows: Vec<DataRow> = store
-                .fetch_range(&"foo", None, None)
+                .fetch(metric, None, None)
                 .expect("Could not fetch range")
                 .collect();
             assert_rows(rows, vec![(0, 30, 50)]);
+        })
+    }
+
+    #[test]
+    fn it_searches_metric_names() {
+        with_test_store(|store| {
+            store
+                .insert(&"foo", TimeWindow::new(0, 1), build_sketch())
+                .expect("Could not insert sketch foo (first)");
+            store
+                .insert(&"foo", TimeWindow::new(1, 2), build_sketch())
+                .expect("Could not insert sketch foo (second)");
+            store
+                .insert(&"foobar", TimeWindow::new(2, 3), build_sketch())
+                .expect("Could not insert sketch foobar");
+            store
+                .insert(&"bazta", TimeWindow::new(3, 4), build_sketch())
+                .expect("Could not insert sketch bazta");
+            store
+                .insert(&"batter", TimeWindow::new(4, 5), build_sketch())
+                .expect("Could not insert sketch batter");
+
+            let results: Vec<String> = store
+                .search("foo*".to_string())
+                .expect("Could not search (first)")
+                .collect();
+            assert_eq!(results, vec!["foo".to_string(), "foobar".to_string()]);
+
+            let results: Vec<String> = store
+                .search("*z*".to_string())
+                .expect("Could not search (second)")
+                .collect();
+            assert_eq!(results, vec!["bazta".to_string()]);
+
+            let results: Vec<String> = store
+                .search("baz*".to_string())
+                .expect("Could not search (third)")
+                .collect();
+            assert_eq!(results, vec!["bazta".to_string()]);
+
+            let results: Vec<String> = store
+                .search("x*".to_string())
+                .expect("Could not search (fourth)")
+                .collect();
+            assert!(results.is_empty());
+
+            let results: Vec<String> = store
+                .search("foobar".to_string())
+                .expect("Could not search (fifth)")
+                .collect();
+            assert_eq!(results, vec!["foobar".to_string()]);
+
+            let results: Vec<String> = store
+                .search("".to_string())
+                .expect("Could not search (sixth)")
+                .collect();
+            assert!(results.is_empty());
+
+            let results: Vec<String> = store
+                .search("*".to_string())
+                .expect("Could not search (seventh)")
+                .collect();
+            assert_eq!(results, vec!["batter", "bazta", "foo", "foobar"]);
         })
     }
 

@@ -7,6 +7,7 @@ pub enum OpOutput {
     End,
     Sketch(TimeWindow, WritableSketch),
     Quantile(TimeWindow, f64, Option<ApproxQuantile>),
+    MetricName(String),
 }
 
 pub trait QueryOp {
@@ -19,3 +20,4 @@ pub mod combine;
 pub mod fetch;
 pub mod group;
 pub mod quantile;
+pub mod search;

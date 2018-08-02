@@ -5,3 +5,4 @@ mod key;
 pub mod mock;
 pub mod store;
 mod value;
+pub mod wildcard;

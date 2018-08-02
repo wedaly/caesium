@@ -13,9 +13,13 @@ pub fn execute_query<'a>(query: &str, source: &DataSource) -> Result<Vec<QueryRe
             OpOutput::End => break,
             OpOutput::Quantile(window, phi, q_opt) => {
                 if let Some(q) = q_opt {
-                    let r = QueryResult::new(window, phi, q);
+                    let r = QueryResult::QuantileWindow(window, phi, q);
                     results.push(r);
                 }
+            }
+            OpOutput::MetricName(metric) => {
+                let r = QueryResult::MetricName(metric);
+                results.push(r);
             }
             _ => return Err(QueryError::InvalidOutputType),
         }

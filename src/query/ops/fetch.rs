@@ -14,7 +14,7 @@ impl<'a> FetchOp<'a> {
         start_ts: Option<TimeStamp>,
         end_ts: Option<TimeStamp>,
     ) -> Result<FetchOp<'a>, QueryError> {
-        let row_iter = source.fetch_range(&metric, start_ts, end_ts)?;
+        let row_iter = source.fetch(metric, start_ts, end_ts)?;
         Ok(FetchOp { row_iter })
     }
 }

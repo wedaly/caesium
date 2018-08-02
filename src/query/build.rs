@@ -4,6 +4,7 @@ use query::ops::combine::CombineOp;
 use query::ops::fetch::FetchOp;
 use query::ops::group::{GroupOp, GroupType};
 use query::ops::quantile::QuantileOp;
+use query::ops::search::SearchOp;
 use query::ops::QueryOp;
 use query::parser::ast::Expression;
 use query::parser::parse::parse;
@@ -31,6 +32,7 @@ fn map_func_to_query_op<'a>(
         "fetch" => build_fetch_op(args, source),
         "group" => build_group_op(args, source),
         "quantile" => build_quantile_op(args, source),
+        "search" => build_search_op(args, source),
         f => Err(QueryError::UnrecognizedFunction(f.to_string())),
     }
 }
@@ -94,6 +96,15 @@ fn build_quantile_op<'a>(
         phi_vec.push(get_float_arg(args, i)?);
     }
     let op = QuantileOp::new(input, phi_vec)?;
+    Ok(Box::new(op))
+}
+
+fn build_search_op<'a>(
+    args: &[Box<Expression>],
+    source: &'a DataSource,
+) -> Result<Box<QueryOp + 'a>, QueryError> {
+    let pattern = get_string_arg(args, 0)?;
+    let op = SearchOp::new(pattern, source)?;
     Ok(Box::new(op))
 }
 

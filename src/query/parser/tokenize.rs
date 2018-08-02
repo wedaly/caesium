@@ -48,7 +48,7 @@ pub fn tokenize(s: &str) -> Result<Vec<Token>, TokenizeError> {
             i += tokenize_right_paren(&mut tokens);
         } else if next_char.is_ascii_digit() {
             i += tokenize_numeric(slice, &mut tokens)?;
-        } else if next_char.is_ascii_alphabetic() {
+        } else if next_char.is_ascii_alphabetic() || next_char == '*' {
             i += tokenize_symbol(slice, &mut tokens)?;
         } else {
             return Err(TokenizeError::UnexpectedChar(next_char));
@@ -101,7 +101,7 @@ fn tokenize_numeric(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeE
 fn tokenize_symbol(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
     let mut i = 0;
     for c in s.chars() {
-        if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
+        if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == '*' {
             i += 1;
         } else if is_separator(c) {
             break;
@@ -159,6 +159,13 @@ mod tests {
     #[test]
     fn it_tokenizes_symbols_with_capitals() {
         assert_tokenize(&"FooBar", vec![Token::Symbol("FooBar".to_string())]);
+    }
+
+    #[test]
+    fn it_tokenizes_symbols_with_asterisk() {
+        assert_tokenize(&"*foo", vec![Token::Symbol("*foo".to_string())]);
+        assert_tokenize(&"foo*bar", vec![Token::Symbol("foo*bar".to_string())]);
+        assert_tokenize(&"foobar*", vec![Token::Symbol("foobar*".to_string())]);
     }
 
     #[test]
