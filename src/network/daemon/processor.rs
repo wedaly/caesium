@@ -88,7 +88,8 @@ impl Processor {
     }
 
     fn update(&mut self, metric_id: usize, ts: TimeStamp, value: u64) {
-        let metric_state = self.metric_states
+        let metric_state = self
+            .metric_states
             .get_mut(metric_id)
             .expect("Could not retrieve metric state from slab");
         metric_state.sketch.insert(value);
@@ -304,7 +305,8 @@ mod tests {
         p.process_expirations(clock, &circuit_lock, &tx);
         drop(tx);
 
-        let actual: Vec<(String, TimeStamp, TimeStamp, usize)> = rx.iter()
+        let actual: Vec<(String, TimeStamp, TimeStamp, usize)> = rx
+            .iter()
             .map(|s| {
                 (
                     s.metric_name.clone(),

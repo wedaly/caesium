@@ -15,7 +15,8 @@ fn build_data_row(window: TimeWindow) -> DataRow {
 }
 
 fn assert_windows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp, f64, u64)>) {
-    let actual: Vec<(TimeStamp, TimeStamp, f64, u64)> = rows.iter()
+    let actual: Vec<(TimeStamp, TimeStamp, f64, u64)> = rows
+        .iter()
         .filter_map(|r| match r {
             &QueryResult::QuantileWindow(window, phi, quantile) => {
                 Some((window.start(), window.end(), phi, quantile.approx_value))
@@ -27,7 +28,8 @@ fn assert_windows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp,
 }
 
 fn assert_metrics(rows: &Vec<QueryResult>, expected: &Vec<&str>) {
-    let actual: Vec<&str> = rows.iter()
+    let actual: Vec<&str> = rows
+        .iter()
         .filter_map(|r| match r {
             QueryResult::MetricName(m) => Some(m.as_str()),
             _ => None,

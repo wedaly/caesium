@@ -18,7 +18,8 @@ impl ErrorCalculator {
     pub fn calculate_error(&self, phi: f64, approx: u64) -> f64 {
         assert!(phi > 0.0 && phi < 1.0);
         let exact_rank = (self.count as f64 * phi) as usize;
-        let &(min_rank, max_rank) = self.value_range_map
+        let &(min_rank, max_rank) = self
+            .value_range_map
             .get(&approx)
             .expect("Could not find query result in original dataset");
 

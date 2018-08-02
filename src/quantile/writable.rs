@@ -391,7 +391,8 @@ mod tests {
         for i in 0..100 {
             s.insert(i as u64);
         }
-        let median = s.to_readable()
+        let median = s
+            .to_readable()
             .query(0.5)
             .map(|q| q.approx_value)
             .expect("Could not query median");

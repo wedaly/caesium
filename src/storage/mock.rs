@@ -21,7 +21,8 @@ impl MockDataSource {
 
     pub fn add_row(&mut self, metric: &str, row: DataRow) {
         self.metrics.insert(metric.to_string());
-        let rows = self.data
+        let rows = self
+            .data
             .entry(metric.to_string())
             .or_insert_with(|| Vec::new());
         rows.push(row);

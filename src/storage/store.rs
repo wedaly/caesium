@@ -665,7 +665,8 @@ mod tests {
         for (row, (start, end, median)) in rows.drain(..).zip(expected) {
             assert_eq!(row.window.start(), start);
             assert_eq!(row.window.end(), end);
-            let val = row.sketch
+            let val = row
+                .sketch
                 .to_readable()
                 .query(0.5)
                 .map(|q| q.approx_value)
