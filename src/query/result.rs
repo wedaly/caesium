@@ -21,7 +21,7 @@ where
             QueryResult::QuantileWindow(window, phi, quantile) => {
                 QUANTILE_WINDOW_TYPE_ID.encode(writer)?;
                 window.encode(&mut writer)?;
-                phi.to_bits().encode(&mut writer)?;
+                phi.encode(&mut writer)?;
                 quantile.encode(&mut writer)?;
             }
             QueryResult::MetricName(metric) => {
@@ -42,7 +42,7 @@ where
         match type_id {
             QUANTILE_WINDOW_TYPE_ID => {
                 let window = TimeWindow::decode(&mut reader)?;
-                let phi = f64::from_bits(u64::decode(&mut reader)?);
+                let phi = f64::decode(&mut reader)?;
                 let quantile = ApproxQuantile::decode(&mut reader)?;
                 Ok(QueryResult::QuantileWindow(window, phi, quantile))
             }
