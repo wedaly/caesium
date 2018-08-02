@@ -3,7 +3,7 @@ use quantile::writable::WritableSketch;
 use regex::Regex;
 use rocksdb;
 use std::cmp::Ordering;
-use storage::datasource::{DataCursor, DataRow, DataSource};
+use storage::datasource::{DataRow, DataSource};
 use storage::downsample::{DownsampleAction, DownsampleStrategy};
 use storage::error::StorageError;
 use storage::key::StorageKey;
@@ -50,11 +50,10 @@ impl MetricStore {
         T: DownsampleStrategy,
     {
         let snapshot = self.raw_db.snapshot();
-        let mut iter = snapshot.raw_iterator();
-        iter.seek_to_first();
-        while iter.valid() {
-            let key = MetricCursor::read_db_key(&iter)?;
-            let val = MetricCursor::read_db_value(&iter)?;
+        let kv_iter = snapshot.iterator(rocksdb::IteratorMode::Start);
+        for (key_bytes, val_bytes) in kv_iter {
+            let key = StorageKey::decode(&mut &key_bytes[..])?;
+            let val = StorageValue::decode(&mut &val_bytes[..])?;
             match strategy.get_action(val.window()) {
                 DownsampleAction::Ignore => {
                     debug!("Ignored key during downsampling: {:?}", key);
@@ -85,7 +84,6 @@ impl MetricStore {
                     self.raw_db.write(batch)?;
                 }
             }
-            iter.next();
         }
         Ok(())
     }
@@ -160,71 +158,37 @@ impl DataSource for MetricStore {
         metric: &str,
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,
-    ) -> Result<Box<DataCursor + 'a>, StorageError> {
+    ) -> Result<Box<Iterator<Item = DataRow> + 'a>, StorageError> {
         MetricStore::validate_metric_name(metric)?;
         let ts = start.unwrap_or(0);
         let end_ts = end.unwrap_or(u64::max_value());
         let start_key = StorageKey::as_bytes(metric, ts)?;
-        let mut raw_iter = self.raw_db.raw_iterator();
-        raw_iter.seek(&start_key);
-        let cursor = MetricCursor::new(raw_iter, metric.to_string(), end_ts);
-        Ok(Box::new(cursor))
-    }
-}
-
-pub struct MetricCursor {
-    raw_iter: rocksdb::DBRawIterator,
-    metric: String,
-    end: TimeStamp,
-}
-
-impl MetricCursor {
-    fn new(raw_iter: rocksdb::DBRawIterator, metric: String, end: TimeStamp) -> MetricCursor {
-        MetricCursor {
-            raw_iter,
-            metric,
-            end,
-        }
-    }
-
-    fn read_db_key(raw_iter: &rocksdb::DBRawIterator) -> Result<StorageKey, StorageError> {
-        assert!(raw_iter.valid());
-        unsafe {
-            // OK because we don't seek the iterator after retrieving the inner key
-            raw_iter
-                .key_inner()
-                .ok_or(StorageError::InternalError("Retrieved key is empty"))
-                .and_then(|mut bytes| StorageKey::decode(&mut bytes).map_err(From::from))
-        }
-    }
-
-    fn read_db_value(raw_iter: &rocksdb::DBRawIterator) -> Result<StorageValue, StorageError> {
-        assert!(raw_iter.valid());
-        unsafe {
-            // OK because we don't seek the iterator after retrieving the inner value
-            raw_iter
-                .value_inner()
-                .ok_or(StorageError::InternalError("Retrieved value is empty"))
-                .and_then(|mut bytes| StorageValue::decode(&mut bytes).map_err(From::from))
-        }
-    }
-}
-
-impl DataCursor for MetricCursor {
-    fn get_next(&mut self) -> Result<Option<DataRow>, StorageError> {
-        let result = if self.raw_iter.valid() {
-            MetricCursor::read_db_key(&self.raw_iter).and_then(|key| {
-                if key.metric() == self.metric && key.window_start() < self.end {
-                    MetricCursor::read_db_value(&self.raw_iter).map(|val| Some(val.to_data_row()))
-                } else {
-                    Ok(None)
-                }
-            })
-        } else {
-            Ok(None)
-        };
-        self.raw_iter.next();
-        result
+        let metric = metric.to_string();
+        let kv_iter = self.raw_db.iterator(rocksdb::IteratorMode::From(
+            &start_key,
+            rocksdb::Direction::Forward,
+        ));
+        let iter = kv_iter
+            .filter_map(
+                |(key_bytes, val_bytes)| match StorageKey::decode(&mut &key_bytes[..]) {
+                    Ok(key) => Some((key, val_bytes)),
+                    Err(err) => {
+                        error!("Error decoding key: {:?}", err);
+                        None
+                    }
+                },
+            )
+            .take_while(move |(key, _)| key.metric() == metric && key.window_start() < end_ts)
+            .filter_map(
+                |(_, val_bytes)| match StorageValue::decode(&mut &val_bytes[..]) {
+                    Ok(val) => Some(val.to_data_row()),
+                    Err(err) => {
+                        error!("Error decoding value: {:?}", err);
+                        None
+                    }
+                },
+            );
+        Ok(Box::new(iter))
     }
 }
 
@@ -238,11 +202,11 @@ mod tests {
     #[test]
     fn it_fetches_no_result() {
         with_test_store(|store| {
-            let mut cursor = store
+            let mut row_iter = store
                 .fetch_range(&"ghost", None, None)
                 .expect("Could not fetch range");
             for _ in 0..5 {
-                let next_row = cursor.get_next().expect("Could not get next row");
+                let next_row = row_iter.next();
                 assert!(next_row.is_none());
             }
         })
@@ -255,13 +219,11 @@ mod tests {
             store
                 .insert(&metric, TimeWindow::new(0, 30), build_sketch())
                 .expect("Could not insert sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&metric, None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30, 50);
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 30, 50)]);
         })
     }
 
@@ -275,13 +237,11 @@ mod tests {
             store
                 .insert(&"bar", TimeWindow::new(60, 90), build_sketch())
                 .expect("Could not insert sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&metric, None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30, 50);
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 30, 50)]);
         })
     }
 
@@ -300,15 +260,11 @@ mod tests {
             store
                 .insert(&"foo", TimeWindow::new(90, 120), build_sketch())
                 .expect("Could not insert sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&"foo", Some(30), Some(90))
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 30, 60, 50);
-            let second_row = cursor.get_next().expect("Could not get second row");
-            assert_row(second_row, 60, 90, 50);
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(30, 60, 50), (60, 90, 50)]);
         })
     }
 
@@ -322,12 +278,11 @@ mod tests {
             store
                 .insert(&m2, TimeWindow::new(30, 60), build_sketch())
                 .expect("Could not insert second sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&m1, None, None)
-                .expect("Could not fetch range");
-            let _ = cursor.get_next().expect("Could not get first row");
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(30, 60, 50)]);
         })
     }
 
@@ -347,15 +302,11 @@ mod tests {
             store
                 .insert(&metric, TimeWindow::new(180, 210), build_sketch())
                 .expect("Could not insert sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&metric, Some(85), Some(150))
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 90, 120, 50);
-            let second_row = cursor.get_next().expect("Could not get second row");
-            assert_row(second_row, 120, 150, 50);
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(90, 120, 50), (120, 150, 50)]);
         })
     }
 
@@ -377,13 +328,11 @@ mod tests {
                     build_sketch_with_values(vec![3]),
                 )
                 .expect("Could not insert second sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&metric, None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30, 2);
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 30, 2)]);
         })
     }
 
@@ -405,13 +354,11 @@ mod tests {
                     build_sketch_with_values(vec![3]),
                 )
                 .expect("Could not insert second sketch");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&metric, None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 90, 2);
-            let next_row = cursor.get_next().expect("Could not get next row");
-            assert!(next_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 90, 2)]);
         })
     }
 
@@ -480,11 +427,11 @@ mod tests {
             store
                 .downsample(&ignore_strategy)
                 .expect("Could not downsample");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&"foo", None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30, 50);
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 30, 50)]);
         })
     }
 
@@ -499,11 +446,11 @@ mod tests {
             store
                 .downsample(&discard_strategy)
                 .expect("Could not downsample");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&"foo", None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert!(first_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert!(rows.is_empty());
         })
     }
 
@@ -520,11 +467,11 @@ mod tests {
             store
                 .downsample(&expand_strategy)
                 .expect("Could not downsample");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&"foo", None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30, 50);
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 30, 50)]);
         })
     }
 
@@ -544,13 +491,11 @@ mod tests {
             store
                 .downsample(&expand_strategy)
                 .expect("Could not downsample");
-            let mut cursor = store
+            let rows: Vec<DataRow> = store
                 .fetch_range(&"foo", None, None)
-                .expect("Could not fetch range");
-            let first_row = cursor.get_next().expect("Could not get first row");
-            assert_row(first_row, 0, 30, 50);
-            let second_row = cursor.get_next().expect("Could not get second row");
-            assert!(second_row.is_none());
+                .expect("Could not fetch range")
+                .collect();
+            assert_rows(rows, vec![(0, 30, 50)]);
         })
     }
 
@@ -579,8 +524,9 @@ mod tests {
         build_sketch_with_values(vals)
     }
 
-    fn assert_row(row_opt: Option<DataRow>, start: TimeStamp, end: TimeStamp, median: u64) {
-        if let Some(row) = row_opt {
+    fn assert_rows(mut rows: Vec<DataRow>, expected: Vec<(TimeStamp, TimeStamp, u64)>) {
+        assert_eq!(rows.len(), expected.len());
+        for (row, (start, end, median)) in rows.drain(..).zip(expected) {
             assert_eq!(row.window.start(), start);
             assert_eq!(row.window.end(), end);
             let val = row.sketch
@@ -589,8 +535,6 @@ mod tests {
                 .map(|q| q.approx_value)
                 .expect("Could not query for median");
             assert_eq!(val, median);
-        } else {
-            panic!("Expected a row, but got None!");
         }
     }
 

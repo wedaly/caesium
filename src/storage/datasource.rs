@@ -9,15 +9,11 @@ pub struct DataRow {
     pub sketch: WritableSketch,
 }
 
-pub trait DataCursor {
-    fn get_next(&mut self) -> Result<Option<DataRow>, StorageError>;
-}
-
 pub trait DataSource {
     fn fetch_range<'a>(
         &'a self,
         metric: &str,
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,
-    ) -> Result<Box<DataCursor + 'a>, StorageError>;
+    ) -> Result<Box<Iterator<Item = DataRow> + 'a>, StorageError>;
 }

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use storage::datasource::{DataCursor, DataRow, DataSource};
+use storage::datasource::{DataRow, DataSource};
 use storage::error::StorageError;
 use time::timestamp::TimeStamp;
 
@@ -30,52 +30,18 @@ impl DataSource for MockDataSource {
         metric: &str,
         start: Option<TimeStamp>,
         end: Option<TimeStamp>,
-    ) -> Result<Box<DataCursor + 'a>, StorageError> {
-        match self.data.get(metric) {
-            Some(rows) => {
-                let start_ts = start.unwrap_or(0);
-                let end_ts = end.unwrap_or(TimeStamp::max_value());
-                let cursor = MockDataCursor::new(rows, start_ts, end_ts);
-                Ok(Box::new(cursor))
+    ) -> Result<Box<Iterator<Item = DataRow> + 'a>, StorageError> {
+        let start_ts = start.unwrap_or(0);
+        let end_ts = end.unwrap_or(TimeStamp::max_value());
+        let rows = self.data.get(metric).unwrap_or(&self.empty);
+        let iter = rows.iter().filter_map(move |r| {
+            let w = r.window;
+            if w.start() >= start_ts && w.end() <= end_ts {
+                Some(r.clone())
+            } else {
+                None
             }
-            None => {
-                let cursor = MockDataCursor::new(&self.empty, 0, 0);
-                Ok(Box::new(cursor))
-            }
-        }
-    }
-}
-
-pub struct MockDataCursor<'a> {
-    idx: usize,
-    data: &'a [DataRow],
-    start_ts: TimeStamp,
-    end_ts: TimeStamp,
-}
-
-impl<'a> MockDataCursor<'a> {
-    fn new(data: &[DataRow], start_ts: TimeStamp, end_ts: TimeStamp) -> MockDataCursor {
-        MockDataCursor {
-            idx: 0,
-            data,
-            start_ts,
-            end_ts,
-        }
-    }
-}
-
-impl<'a> DataCursor for MockDataCursor<'a> {
-    fn get_next(&mut self) -> Result<Option<DataRow>, StorageError> {
-        while self.idx < self.data.len() {
-            let row_opt = self.data.get(self.idx).cloned();
-            self.idx += 1;
-
-            if let Some(row) = row_opt {
-                if row.window.start() >= self.start_ts && row.window.end() <= self.end_ts {
-                    return Ok(Some(row));
-                }
-            }
-        }
-        Ok(None)
+        });
+        Ok(Box::new(iter))
     }
 }
