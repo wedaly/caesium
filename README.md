@@ -7,7 +7,7 @@ Experimental system for application monitoring, so named because: caesium is an 
 Getting Started
 ---------------
 
-1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.27
+1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.28
 2. Start the server: `cargo run --bin server`
 3. Start the daemon: `cargo run --bin daemon`
 
