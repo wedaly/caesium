@@ -31,9 +31,11 @@ fn parse_expr(tokens: &[Token]) -> ParseResult<Box<Expression>> {
     match tokens.first() {
         Some(Token::Int(i)) => Ok((1, Box::new(Expression::IntLiteral(*i)))),
         Some(Token::Float(f)) => Ok((1, Box::new(Expression::FloatLiteral(*f)))),
-        Some(Token::Symbol(s)) => match tokens.get(1) {
+        Some(Token::String(s)) => Ok((1, Box::new(Expression::StringLiteral(s.clone())))),
+        Some(Token::Symbol(_)) => match tokens.get(1) {
             Some(Token::LeftParen) => parse_function_call(tokens),
-            _ => Ok((1, Box::new(Expression::StringLiteral(s.to_string())))),
+            Some(t) => Err(ParseError::UnexpectedToken(t.clone())),
+            None => Err(ParseError::UnexpectedEnd),
         },
         Some(t) => Err(ParseError::UnexpectedToken(t.clone())),
         None => Err(ParseError::UnexpectedEnd),
@@ -98,7 +100,7 @@ mod tests {
 
     #[test]
     fn it_parses_string_literal() {
-        let ast = parse(&"foo").expect("Could not parse input string");
+        let ast = parse(&"\"foo\"").expect("Could not parse input string");
         match *ast {
             Expression::StringLiteral(s) => assert_eq!(s, "foo"),
             _ => panic!("Unexpected node type"),
@@ -137,7 +139,7 @@ mod tests {
 
     #[test]
     fn it_parses_function_call_literal_args() {
-        let ast = parse(&"foo(bar, 123.45)").expect("Could not parse input string");
+        let ast = parse(&"foo(\"bar\", 123.45)").expect("Could not parse input string");
         match { *ast } {
             Expression::FunctionCall(name, args) => {
                 assert_eq!(name, "foo");

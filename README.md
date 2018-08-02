@@ -37,11 +37,11 @@ This starts a read-eval-print-loop you can use to query to the server:
 
 | query | meaning |
 | ----- | ------- |
-| `quantile(fetch(foo), 0.1, 0.5, 0.9)` | Query the 10th, 50th, and 90th percentiles for each time window in the series "foo" |
-| `quantile(fetch(foo, 1532646685, 1532651091), 0.5)` | Query the median for windows in a time range |
-| `quantile(coalesce(fetch(foo)), 0.5)` | Combine all time windows into one, then query the combined window |
-| `quantile(group(hours, fetch(foo)), 0.5)` | Combine time windows that start within the same hour, then query the combined windows |
-| `quantile(combine(fetch(foo), fetch(bar)), 0.5)` | Combine overlapping time windows from "foo" and "bar", then query the median of each window |
+| `quantile(fetch("foo"), 0.1, 0.5, 0.9)` | Query the 10th, 50th, and 90th percentiles for each time window in the series "foo" |
+| `quantile(fetch("foo", 1532646685, 1532651091), 0.5)` | Query the median for windows in a time range |
+| `quantile(coalesce(fetch("foo")), 0.5)` | Combine all time windows into one, then query the combined window |
+| `quantile(group("hours", fetch("foo")), 0.5)` | Combine time windows that start within the same hour, then query the combined windows |
+| `quantile(combine(fetch("foo"), fetch("bar")), 0.5)` | Combine overlapping time windows from "foo" and "bar", then query the median of each window |
 
 
 Measuring Quantile Error

@@ -3,6 +3,7 @@ use std::num::{ParseFloatError, ParseIntError};
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Symbol(String),
+    String(String),
     Int(u64),
     Float(f64),
     LeftParen,
@@ -13,6 +14,7 @@ pub enum Token {
 #[derive(Debug)]
 pub enum TokenizeError {
     UnexpectedChar(char),
+    UnexpectedEnd,
     ParseIntError(ParseIntError),
     ParseFloatError(ParseFloatError),
 }
@@ -46,9 +48,11 @@ pub fn tokenize(s: &str) -> Result<Vec<Token>, TokenizeError> {
             i += tokenize_left_paren(&mut tokens);
         } else if next_char == ')' {
             i += tokenize_right_paren(&mut tokens);
+        } else if next_char == '"' {
+            i += tokenize_string_literal(slice, &mut tokens)?;
         } else if next_char.is_ascii_digit() {
             i += tokenize_numeric(slice, &mut tokens)?;
-        } else if next_char.is_ascii_alphabetic() || next_char == '*' {
+        } else if next_char.is_ascii_alphabetic() {
             i += tokenize_symbol(slice, &mut tokens)?;
         } else {
             return Err(TokenizeError::UnexpectedChar(next_char));
@@ -72,7 +76,23 @@ fn tokenize_right_paren(tokens: &mut Vec<Token>) -> usize {
     1
 }
 
+fn tokenize_string_literal(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
+    debug_assert!(s.chars().next() == Some('"'));
+    for (idx, c) in s[1..].chars().enumerate() {
+        if c == '"' {
+            let tok = Token::String(s[1..=idx].to_string());
+            tokens.push(tok);
+            return Ok(idx + 2);
+        }
+    }
+    Err(TokenizeError::UnexpectedEnd)
+}
+
 fn tokenize_numeric(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
+    debug_assert!(match s.chars().next() {
+        Some(c) => c.is_ascii_digit(),
+        _ => false,
+    });
     let mut i = 0;
     let mut found_decimal = false;
     for c in s.chars() {
@@ -99,9 +119,13 @@ fn tokenize_numeric(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeE
 }
 
 fn tokenize_symbol(s: &str, tokens: &mut Vec<Token>) -> Result<usize, TokenizeError> {
+    debug_assert!(match s.chars().next() {
+        Some(c) => c.is_ascii_alphabetic(),
+        _ => false,
+    });
     let mut i = 0;
     for c in s.chars() {
-        if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == '*' {
+        if c.is_ascii_alphanumeric() {
             i += 1;
         } else if is_separator(c) {
             break;
@@ -139,33 +163,14 @@ mod tests {
     }
 
     #[test]
-    fn it_tokenizes_symbols_with_periods() {
-        assert_tokenize(
-            &"region.us.server.abcd",
-            vec![Token::Symbol("region.us.server.abcd".to_string())],
-        );
+    fn it_tokenizes_string_literals() {
+        assert_tokenize(&"\"\"", vec![Token::String("".to_string())]);
+        assert_tokenize(&"\"foo*bar\"", vec![Token::String("foo*bar".to_string())]);
     }
 
     #[test]
-    fn it_tokenizes_symbols_with_hyphens() {
-        assert_tokenize(&"us-west", vec![Token::Symbol("us-west".to_string())]);
-    }
-
-    #[test]
-    fn it_tokenizes_symbols_with_underscores() {
-        assert_tokenize(&"env_prod", vec![Token::Symbol("env_prod".to_string())]);
-    }
-
-    #[test]
-    fn it_tokenizes_symbols_with_capitals() {
-        assert_tokenize(&"FooBar", vec![Token::Symbol("FooBar".to_string())]);
-    }
-
-    #[test]
-    fn it_tokenizes_symbols_with_asterisk() {
-        assert_tokenize(&"*foo", vec![Token::Symbol("*foo".to_string())]);
-        assert_tokenize(&"foo*bar", vec![Token::Symbol("foo*bar".to_string())]);
-        assert_tokenize(&"foobar*", vec![Token::Symbol("foobar*".to_string())]);
+    fn it_tokenizes_string_literals_unexpected_end() {
+        assert_error(&"\"noend");
     }
 
     #[test]
@@ -222,7 +227,7 @@ mod tests {
 
     fn assert_error(input: &str) {
         match tokenize(input) {
-            Ok(_) => panic!("Expected error"),
+            Ok(_) => assert!(false, "Expected error"),
             Err(_) => {}
         }
     }

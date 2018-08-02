@@ -44,7 +44,7 @@ fn it_queries_quantile_by_metric() {
     source.add_row("foo", build_data_row(TimeWindow::new(1, 2)));
     source.add_row("foo", build_data_row(TimeWindow::new(2, 3)));
     source.add_row("bar", build_data_row(TimeWindow::new(3, 4)));
-    let query = "quantile(fetch(foo), 0.5)";
+    let query = "quantile(fetch(\"foo\"), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(1, 2, 0.5, 50), (2, 3, 0.5, 50)]);
 }
@@ -56,7 +56,7 @@ fn it_queries_multiple_quantiles() {
     source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
     source.add_row("foo", build_data_row(TimeWindow::new(30, 40)));
     source.add_row("foo", build_data_row(TimeWindow::new(40, 50)));
-    let query = "quantile(fetch(foo), 0.1, 0.5, 0.9)";
+    let query = "quantile(fetch(\"foo\"), 0.1, 0.5, 0.9)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(
         &results,
@@ -84,7 +84,7 @@ fn it_queries_quantile_select_time_range() {
     source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
     source.add_row("foo", build_data_row(TimeWindow::new(30, 40)));
     source.add_row("foo", build_data_row(TimeWindow::new(40, 50)));
-    let query = "quantile(fetch(foo, 20, 40), 0.5)";
+    let query = "quantile(fetch(\"foo\", 20, 40), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(20, 30, 0.5, 50), (30, 40, 0.5, 50)]);
 }
@@ -93,7 +93,7 @@ fn it_queries_quantile_select_time_range() {
 fn it_queries_quantile_metric_not_found() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(1, 2)));
-    let query = "quantile(fetch(bar), 0.5)";
+    let query = "quantile(fetch(\"bar\"), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![]);
 }
@@ -106,7 +106,7 @@ fn it_queries_quantile_group_by_hour() {
     source.add_row("foo", build_data_row(TimeWindow::new(30, 40)));
     source.add_row("foo", build_data_row(TimeWindow::new(40, 50)));
     source.add_row("foo", build_data_row(TimeWindow::new(4000, 4500)));
-    let query = "quantile(group(hours, fetch(foo, 0, 10000)), 0.5)";
+    let query = "quantile(group(\"hours\", fetch(\"foo\", 0, 10000)), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(10, 50, 0.5, 50), (4000, 4500, 0.5, 50)]);
 }
@@ -118,7 +118,7 @@ fn it_queries_quantile_group_by_day() {
     source.add_row("foo", build_data_row(TimeWindow::new(20, 30)));
     source.add_row("foo", build_data_row(TimeWindow::new(7000, 8000)));
     source.add_row("foo", build_data_row(TimeWindow::new(90000, 91000)));
-    let query = "quantile(group(days, fetch(foo, 0, 100000)), 0.5)";
+    let query = "quantile(group(\"days\", fetch(\"foo\", 0, 100000)), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(
         &results,
@@ -131,7 +131,7 @@ fn it_coalesces_adjacent_time_windows() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(0, 30)));
     source.add_row("foo", build_data_row(TimeWindow::new(30, 60)));
-    let query = "quantile(coalesce(fetch(foo)), 0.5)";
+    let query = "quantile(coalesce(fetch(\"foo\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(0, 60, 0.5, 50)]);
 }
@@ -141,7 +141,7 @@ fn it_coalesces_overlapping_time_windows() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(30, 60)));
     source.add_row("foo", build_data_row(TimeWindow::new(15, 35)));
-    let query = "quantile(coalesce(fetch(foo)), 0.5)";
+    let query = "quantile(coalesce(fetch(\"foo\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(15, 60, 0.5, 50)]);
 }
@@ -151,7 +151,7 @@ fn it_coalesces_nonadjacent_time_windows() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
     source.add_row("foo", build_data_row(TimeWindow::new(40, 90)));
-    let query = "quantile(coalesce(fetch(foo)), 0.5)";
+    let query = "quantile(coalesce(fetch(\"foo\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(10, 90, 0.5, 50)]);
 }
@@ -161,7 +161,7 @@ fn it_coalesces_idempotent() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(10, 20)));
     source.add_row("foo", build_data_row(TimeWindow::new(40, 90)));
-    let query = "quantile(coalesce(coalesce(fetch(foo))), 0.5)";
+    let query = "quantile(coalesce(coalesce(fetch(\"foo\"))), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(10, 90, 0.5, 50)]);
 }
@@ -174,7 +174,7 @@ fn it_combines_time_series() {
     source.add_row("bar", build_data_row(TimeWindow::new(0, 30)));
     source.add_row("bar", build_data_row(TimeWindow::new(30, 60)));
 
-    let query = "quantile(combine(fetch(foo), fetch(bar)), 0.5)";
+    let query = "quantile(combine(fetch(\"foo\"), fetch(\"bar\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(0, 30, 0.5, 50), (30, 60, 0.5, 50)]);
 }
@@ -182,7 +182,7 @@ fn it_combines_time_series() {
 #[test]
 fn it_combines_empty_inputs() {
     let mut source = MockDataSource::new();
-    let query = "quantile(combine(fetch(foo), fetch(bar)), 0.5)";
+    let query = "quantile(combine(fetch(\"foo\"), fetch(\"bar\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![]);
 }
@@ -191,7 +191,7 @@ fn it_combines_empty_inputs() {
 fn it_combines_single_input() {
     let mut source = MockDataSource::new();
     source.add_row("foo", build_data_row(TimeWindow::new(0, 30)));
-    let query = "quantile(combine(fetch(foo), fetch(bar)), 0.5)";
+    let query = "quantile(combine(fetch(\"foo\"), fetch(\"bar\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(&results, &vec![(0, 30, 0.5, 50)]);
 }
@@ -208,7 +208,7 @@ fn it_combines_multiple_inputs() {
     source.add_row("bar", build_data_row(TimeWindow::new(55, 59)));
     source.add_row("bar", build_data_row(TimeWindow::new(69, 80)));
     source.add_row("bar", build_data_row(TimeWindow::new(90, 100)));
-    let query = "quantile(combine(fetch(foo), fetch(bar)), 0.5)";
+    let query = "quantile(combine(fetch(\"foo\"), fetch(\"bar\")), 0.5)";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_windows(
         &results,
@@ -230,7 +230,7 @@ fn it_searches_metric_names() {
     source.add_row("foobar", build_data_row(TimeWindow::new(40, 50)));
     source.add_row("bazbar", build_data_row(TimeWindow::new(50, 60)));
     source.add_row("bazfoobar", build_data_row(TimeWindow::new(50, 60)));
-    let query = "search(*foo*r)";
+    let query = "search(\"*foo*r\")";
     let results = execute_query(&query, &mut source).expect("Could not execute query");
     assert_metrics(&results, &vec!["bazfoobar", "foobar"]);
 }

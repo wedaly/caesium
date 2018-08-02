@@ -25,7 +25,7 @@ fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: us
 fn bench_quantile_query_single_row(bench: &mut Bencher) {
     let mut db = MockDataSource::new();
     insert(&mut db, "foo", 0, 30, 2048);
-    bench.iter(|| execute_query(&"quantile(fetch(foo), 0.5)", &db))
+    bench.iter(|| execute_query(&"quantile(fetch(\"foo\"), 0.5)", &db))
 }
 
 fn bench_quantile_query_many_rows(bench: &mut Bencher) {
@@ -35,13 +35,13 @@ fn bench_quantile_query_many_rows(bench: &mut Bencher) {
         let end = start + 30;
         insert(&mut db, "foo", start, end, 2048);
     }
-    bench.iter(|| execute_query(&"quantile(fetch(foo), 0.5)", &db))
+    bench.iter(|| execute_query(&"quantile(fetch(\"foo\"), 0.5)", &db))
 }
 
 fn bench_coalesce_query_single_row(bench: &mut Bencher) {
     let mut db = MockDataSource::new();
     insert(&mut db, "foo", 0, 30, 2048);
-    bench.iter(|| execute_query(&"quantile(coalesce(fetch(foo)), 0.5)", &db))
+    bench.iter(|| execute_query(&"quantile(coalesce(fetch(\"foo\")), 0.5)", &db))
 }
 
 fn bench_coalesce_query_many_rows(bench: &mut Bencher) {
@@ -51,14 +51,19 @@ fn bench_coalesce_query_many_rows(bench: &mut Bencher) {
         let end = start + 30;
         insert(&mut db, "foo", start, end, 2048);
     }
-    bench.iter(|| execute_query(&"quantile(coalesce(fetch(foo)), 0.5)", &db))
+    bench.iter(|| execute_query(&"quantile(coalesce(fetch(\"foo\")), 0.5)", &db))
 }
 
 fn bench_combine_query_single_row(bench: &mut Bencher) {
     let mut db = MockDataSource::new();
     insert(&mut db, "foo", 0, 30, 2048);
     insert(&mut db, "bar", 0, 30, 2048);
-    bench.iter(|| execute_query(&"quantile(combine(fetch(foo), fetch(bar)), 0.5)", &db))
+    bench.iter(|| {
+        execute_query(
+            &"quantile(combine(fetch(\"foo\"), fetch(\"bar\")), 0.5)",
+            &db,
+        )
+    })
 }
 
 fn bench_combine_query_many_rows(bench: &mut Bencher) {
@@ -69,7 +74,12 @@ fn bench_combine_query_many_rows(bench: &mut Bencher) {
         insert(&mut db, "foo", start, end, 2048);
         insert(&mut db, "bar", start, end, 2048);
     }
-    bench.iter(|| execute_query(&"quantile(combine(fetch(foo), fetch(bar)), 0.5)", &db))
+    bench.iter(|| {
+        execute_query(
+            &"quantile(combine(fetch(\"foo\"), fetch(\"bar\")), 0.5)",
+            &db,
+        )
+    })
 }
 
 fn bench_wildcard_short_str(bench: &mut Bencher) {
