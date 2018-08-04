@@ -1,0 +1,9 @@
+[package]
+name = "caesium-cli"
+version = "0.1.0"
+authors = ["Will Daly"]
+
+[dependencies]
+caesium-core = { path = "../caesium-core" }
+clap = "2.32.0"
+rand = "0.4"

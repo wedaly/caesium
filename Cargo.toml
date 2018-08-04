@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "core",
-    "daemon",
-    "server"
+    "caesium-core",
+    "caesium-daemon",
+    "caesium-server",
+    "caesium-cli"
 ]

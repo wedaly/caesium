@@ -12,14 +12,14 @@ use std::num::ParseIntError;
 fn main() -> Result<(), Error> {
     env_logger::init();
     let args = parse_args()?;
-    run_daemon(args.source_addr, args.sink_addr, args.window_size)?;
+    run_daemon(args.listen_addr, args.publish_addr, args.window_size)?;
     Ok(())
 }
 
 #[derive(Debug)]
 struct Args {
-    source_addr: SocketAddr,
-    sink_addr: SocketAddr,
+    listen_addr: SocketAddr,
+    publish_addr: SocketAddr,
     window_size: u64,
 }
 
@@ -27,14 +27,14 @@ fn parse_args() -> Result<Args, Error> {
     let matches = App::new("Caesium daemon")
         .about("Collect and aggregate metric data, then send to backend server")
         .arg(
-            Arg::with_name("SOURCE_ADDR")
-                .long("source-addr")
+            Arg::with_name("LISTEN_ADDR")
+                .long("listen-addr")
                 .takes_value(true)
                 .help("IP address and port to receive metric data (defaults to 127.0.0.1:8001)"),
         )
         .arg(
-            Arg::with_name("SINK_ADDR")
-                .long("sink-addr")
+            Arg::with_name("PUBLISH_ADDR")
+                .long("publish-addr")
                 .takes_value(true)
                 .help("IP address and port of backend server (defaults to 127.0.0.1:8000)"),
         )
@@ -47,13 +47,13 @@ fn parse_args() -> Result<Args, Error> {
         )
         .get_matches();
 
-    let source_addr = matches
-        .value_of("SOURCE_ADDR")
+    let listen_addr = matches
+        .value_of("LISTEN_ADDR")
         .unwrap_or("127.0.0.1:8001")
         .parse::<SocketAddr>()?;
 
-    let sink_addr = matches
-        .value_of("SINK_ADDR")
+    let publish_addr = matches
+        .value_of("PUBLISH_ADDR")
         .unwrap_or("127.0.0.1:8000")
         .parse::<SocketAddr>()?;
 
@@ -67,8 +67,8 @@ fn parse_args() -> Result<Args, Error> {
     }
 
     Ok(Args {
-        source_addr,
-        sink_addr,
+        listen_addr,
+        publish_addr,
         window_size,
     })
 }

@@ -23,16 +23,16 @@ function cleanup {
 }
 
 function background_server {
-    RUST_LOG=caesium=debug $BIN/server --db-name testdb &
+    RUST_LOG=caesium=debug $BIN/caesium-server --db-path ./testdb &
     sleep 1
 }
 
 function insert {
-    $BIN/insert $1 $2 $3 $4
+    $BIN/caesium-insert $1 $2 $3 $4
 }
 
 function query {
-    echo $1 | $BIN/query > $OUT/$2
+    echo $1 | $BIN/caesium-query > $OUT/$2
 }
 
 function check {

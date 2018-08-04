@@ -13,25 +13,25 @@ use std::net::{AddrParseError, SocketAddr};
 fn main() -> Result<(), Error> {
     env_logger::init();
     let args = parse_args()?;
-    let db = MetricStore::open(&args.db_name)?;
+    let db = MetricStore::open(&args.db_path)?;
     run_server(&args.server_addr, db)?;
     Ok(())
 }
 
 #[derive(Debug)]
 struct Args {
-    db_name: String,
+    db_path: String,
     server_addr: SocketAddr,
 }
 
 fn parse_args() -> Result<Args, Error> {
     let matches = App::new("Caesium server")
         .about("Backend server for storing and querying metric data")
-        .arg(Arg::with_name("DB_NAME")
+        .arg(Arg::with_name("DB_PATH")
             .short("d")
-            .long("db-name")
+            .long("db-path")
             .takes_value(true)
-            .help("Name of the database.  The database directory will be created if it doesn't already exist."))
+            .help("Path to the database directory.  The directory will be created if it doesn't exist."))
         .arg(Arg::with_name("SERVER_ADDR")
             .short("a")
             .long("addr")
@@ -39,13 +39,13 @@ fn parse_args() -> Result<Args, Error> {
             .help("IP address and port the server will listen on (defaults to 127.0.0.1:8000)"))
         .get_matches();
 
-    let db_name = matches.value_of("DB_NAME").unwrap_or("db").to_string();
+    let db_path = matches.value_of("DB_PATH").unwrap_or("db").to_string();
     let server_addr = matches
         .value_of("SERVER_ADDR")
         .unwrap_or("127.0.0.1:8000")
         .parse::<SocketAddr>()?;
     Ok(Args {
-        db_name,
+        db_path,
         server_addr,
     })
 }

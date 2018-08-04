@@ -27,18 +27,18 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 
 pub fn run_daemon(
-    source_addr: SocketAddr,
-    sink_addr: SocketAddr,
+    listen_addr: SocketAddr,
+    publish_addr: SocketAddr,
     window_size: u64,
 ) -> Result<(), NetworkError> {
-    let socket = UdpSocket::bind(source_addr)?;
-    let client = Client::new(sink_addr);
+    let socket = UdpSocket::bind(listen_addr)?;
+    let client = Client::new(publish_addr);
     let (circuit_ref1, circuit_ref2) = shared_circuit();
     let (listener_out, processor_in) = channel();
     let (processor_out, sender_in) = channel();
     thread::spawn(move || processor_thread(window_size, processor_in, processor_out, circuit_ref1));
     thread::spawn(move || sender_thread(client, sender_in, circuit_ref2));
-    info!("Listening on {}, publishing to {}", source_addr, sink_addr);
+    info!("Listening on {}, publishing to {}", listen_addr, publish_addr);
     listener_thread(socket, listener_out)
 }
 

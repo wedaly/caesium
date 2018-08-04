@@ -8,10 +8,8 @@ Getting Started
 ---------------
 
 1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.28
-2. Build the project: `cargo build`
-3. Change to the directory with the built binaries: `cd ./target/debug`
-4. Start the server: `server`
-5. Start the daemon: `daemon`
+4. Start the server: `cargo run -p caesium-server`
+5. Start the daemon: `cargo run -p caesium-daemon`
 
 To enable logging to stdout, set the environment variable:
 ```
@@ -30,7 +28,10 @@ bash -c "echo -n \"foo:100|ms\" >/dev/udp/127.0.0.1/8001"
 
 The daemon flushes metrics to the backend server in 30 second windows.
 
-To query the server, you can use the `query` command line tool (in `./target/debug`)
+To query the server, you can use the `caesium-query` command line tool:
+```
+cargo run -p caesium-cli --bin caesium-query
+```
 
 This starts a read-eval-print-loop you can use to query to the server:
 
@@ -53,9 +54,9 @@ Caesium includes a command-line tool for measuring the error introduced by its q
 seq 0 100 > data.txt
 ```
 
-2. Run the `quantile` tool on the data file:
+2. Run the `caesium-quantile` tool on the data file:
 ```
-quantile data.txt
+cargo run -p caesium-cli --bin caesium-quantile data.txt
 ```
 
 This will report:
@@ -66,7 +67,7 @@ This will report:
 
 By default, the quantile tool inserts every value from the data file into a single sketch.  You can measure the error introduced by merging sketches by specifying the number of merges.  For example, to split the dataset into ten sketches that are merged:
 ```
-quantile data.txt -n 10
+cargo run -p caesium-cli --bin caesium-quantile data.txt -n 10
 ```
 
 
@@ -76,6 +77,16 @@ Tests
 * To run the unit test suite: `cargo test`
 * To run the integration test suite: `./tests/run.sh` (must build the binaries first!)
 * To run performance (micro) benchmarks: `cargo bench`
+
+
+Docker
+------
+
+To build Docker images of the server and daemon:
+```
+docker build -t caesium-daemon -f caesium-daemon/Dockerfile .
+docker build -t caesium-server -f caesium-server/Dockerfile .
+```
 
 
 License
