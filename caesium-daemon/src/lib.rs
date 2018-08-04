@@ -38,7 +38,10 @@ pub fn run_daemon(
     let (processor_out, sender_in) = channel();
     thread::spawn(move || processor_thread(window_size, processor_in, processor_out, circuit_ref1));
     thread::spawn(move || sender_thread(client, sender_in, circuit_ref2));
-    info!("Listening on {}, publishing to {}", listen_addr, publish_addr);
+    info!(
+        "Listening on {}, publishing to {}",
+        listen_addr, publish_addr
+    );
     listener_thread(socket, listener_out)
 }
 

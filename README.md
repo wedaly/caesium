@@ -3,17 +3,14 @@ Caesium
 
 Experimental system for application monitoring, so named because: caesium is an element used in atomic clocks; clocks are used to measure application response times; this system monitors application response times.
 
-
 Getting Started
 ---------------
 
-1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.28
-4. Start the server: `cargo run -p caesium-server`
-5. Start the daemon: `cargo run -p caesium-daemon`
+Install [docker](https://docs.docker.com/install/) and [docker-compose](https://docs.docker.com/compose/install/).
 
-To enable logging to stdout, set the environment variable:
+To start the server and daemon locally:
 ```
-RUST_LOG=caesium=debug
+docker-compose up
 ```
 
 
@@ -28,9 +25,16 @@ bash -c "echo -n \"foo:100|ms\" >/dev/udp/127.0.0.1/8001"
 
 The daemon flushes metrics to the backend server in 30 second windows.
 
+To insert data directly to the backend server (useful for testing):
+```
+docker-compose run cli bash
+$ seq 0 100 > data.txt
+$ caesium-insert foobar 0 30 data.txt
+```
+
 To query the server, you can use the `caesium-query` command line tool:
 ```
-cargo run -p caesium-cli --bin caesium-query
+docker-compose run cli caesium-query
 ```
 
 This starts a read-eval-print-loop you can use to query to the server:
@@ -49,14 +53,11 @@ Measuring Quantile Error
 
 Caesium includes a command-line tool for measuring the error introduced by its quantile sketching algorithm.
 
-1. Create a text file containing one number per line (unsigned 64-bit integer).  For example:
+Example:
 ```
-seq 0 100 > data.txt
-```
-
-2. Run the `caesium-quantile` tool on the data file:
-```
-cargo run -p caesium-cli --bin caesium-quantile data.txt
+docker-compose run cli bash
+$ seq 0 100 > data.txt
+$ caesium-quantile data.txt
 ```
 
 This will report:
@@ -67,7 +68,20 @@ This will report:
 
 By default, the quantile tool inserts every value from the data file into a single sketch.  You can measure the error introduced by merging sketches by specifying the number of merges.  For example, to split the dataset into ten sketches that are merged:
 ```
-cargo run -p caesium-cli --bin caesium-quantile data.txt -n 10
+$ caesium-quantile data.txt -n 10
+```
+
+
+Building Locally
+----------------
+
+1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.28
+2. Build the project: `cargo build`
+3. Binaries will be written to the "target" directory.
+
+To enable logging to stdout when running binaries, set the environment variable:
+```
+RUST_LOG=caesium=debug
 ```
 
 
@@ -77,22 +91,6 @@ Tests
 * To run the unit test suite: `cargo test`
 * To run the integration test suite: `./tests/run.sh` (must build the binaries first!)
 * To run performance (micro) benchmarks: `cargo bench`
-
-
-Docker
-------
-
-Install [docker](https://docs.docker.com/install/) and [docker-compose](https://docs.docker.com/compose/install/).
-
-To build Docker images of the server and daemon:
-```
-docker-compose build
-```
-
-To run the server and daemon locally:
-```
-docker-compose up
-```
 
 
 License

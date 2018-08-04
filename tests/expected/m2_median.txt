@@ -1,2 +1,4 @@
-start=30, end=60, phi=0.5, count=10, approx=6, lower=4, upper=10
+Server address: 127.0.0.1:8000
+> start=30, end=60, phi=0.5, count=10, approx=6, lower=4, upper=10
 start=60, end=90, phi=0.5, count=11, approx=15, lower=13, upper=20
+> 

@@ -23,5 +23,16 @@ services:
         build:
             context: .
             dockerfile: ./caesium-daemon/Dockerfile
+        depends_on:
+            - server
+    cli:
+        image: caesium-cli
+        environment:
+            - CAESIUM_SERVER_ADDR=server:8000
+        build:
+            context: .
+            dockerfile: ./caesium-cli/Dockerfile
+        depends_on:
+            - server
 volumes:
     db-data:

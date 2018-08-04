@@ -6,15 +6,20 @@ use caesium_core::network::error::NetworkError;
 use caesium_core::network::message::Message;
 use caesium_core::network::result::QueryResult;
 use clap::{App, Arg};
-use std::io::stdin;
+use std::env;
 use std::io;
+use std::io::Write;
+use std::io::stdin;
 use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::process::exit;
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
+    println!("Server address: {}", args.server_addr);
     let mut client = Client::new(args.server_addr);
     loop {
+        print!("> ");
+        io::stdout().flush()?;
         let mut line = String::new();
         match stdin().read_line(&mut line) {
             Ok(_) => handle_query(&mut client, line.trim()),
@@ -36,12 +41,14 @@ fn parse_args() -> Result<Args, Error> {
                 .short("a")
                 .long("addr")
                 .takes_value(true)
-                .help("IP address and port of the backend server (defaults to 127.0.0.1:8000)"),
+                .help("IP address and port of the backend server (defaults to $CAESIUM_SERVER_ADDR, then 127.0.0.1:8000)"),
         )
         .get_matches();
+    let default_addr =
+        env::var("CAESIUM_SERVER_ADDR").unwrap_or_else(|_| "127.0.0.1:8000".to_string());
     let server_addr = matches
         .value_of("SERVER_ADDR")
-        .unwrap_or("127.0.0.1:8000")
+        .unwrap_or(&default_addr)
         .to_socket_addrs()?
         .next()
         .ok_or(Error::ArgError("Expected socket address"))?;
@@ -91,7 +98,7 @@ enum Error {
     AddrParseError(AddrParseError),
     NetworkError(NetworkError),
     IOError(io::Error),
-    ArgError(&'static str)
+    ArgError(&'static str),
 }
 
 impl From<AddrParseError> for Error {

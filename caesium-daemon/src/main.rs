@@ -6,9 +6,9 @@ extern crate env_logger;
 use caesium_core::network::error::NetworkError;
 use caesium_daemon::run_daemon;
 use clap::{App, Arg};
+use std::io;
 use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
-use std::io;
 
 fn main() -> Result<(), Error> {
     env_logger::init();

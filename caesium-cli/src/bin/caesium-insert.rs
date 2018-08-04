@@ -8,6 +8,7 @@ use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
 use caesium_core::time::window::TimeWindow;
 use clap::{App, Arg};
+use std::env;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
@@ -70,7 +71,7 @@ fn parse_args() -> Result<Args, Error> {
                 .long("server-addr")
                 .short("a")
                 .takes_value(true)
-                .help("IP address and port of backend server (defaults to 127.0.0.1:8000"),
+                .help("IP address and port of the backend server (defaults to $CAESIUM_SERVER_ADDR, then 127.0.0.1:8000)"),
         )
         .get_matches();
 
@@ -78,9 +79,11 @@ fn parse_args() -> Result<Args, Error> {
     let start_ts = matches.value_of("START_TS").unwrap().parse::<TimeStamp>()?;
     let end_ts = matches.value_of("END_TS").unwrap().parse::<TimeStamp>()?;
     let path = matches.value_of("DATA_PATH").unwrap().to_string();
+    let default_addr =
+        env::var("CAESIUM_SERVER_ADDR").unwrap_or_else(|_| "127.0.0.1:8000".to_string());
     let server_addr = matches
         .value_of("SERVER_ADDR")
-        .unwrap_or("127.0.0.1:8000")
+        .unwrap_or(&default_addr)
         .to_socket_addrs()?
         .next()
         .ok_or(Error::ArgError("Expected socket address"))?;

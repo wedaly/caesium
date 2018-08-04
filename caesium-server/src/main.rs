@@ -8,8 +8,8 @@ use caesium_server::run_server;
 use caesium_server::storage::error::StorageError;
 use caesium_server::storage::store::MetricStore;
 use clap::{App, Arg};
-use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::io;
+use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -59,7 +59,7 @@ enum Error {
     IOError(io::Error),
     NetworkError(NetworkError),
     StorageError(StorageError),
-    ArgError(&'static str)
+    ArgError(&'static str),
 }
 
 impl From<AddrParseError> for Error {
