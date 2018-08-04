@@ -1,0 +1,27 @@
+version: '3'
+services:
+    server:
+        image: caesium-server
+        volumes:
+            - db-data:/data
+        ports:
+            - "8000:8000/tcp"
+        environment:
+            - LOG_LEVEL=debug
+            - PORT=8000
+        build:
+            context: .
+            dockerfile: ./caesium-server/Dockerfile
+    daemon:
+        image: caesium-daemon
+        ports:
+            - "8001:8001/udp"
+        environment:
+            - LOG_LEVEL=debug
+            - PORT=8001
+            - PUBLISH_ADDR=server:8000
+        build:
+            context: .
+            dockerfile: ./caesium-daemon/Dockerfile
+volumes:
+    db-data:

@@ -11,7 +11,7 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
-use std::net::{AddrParseError, SocketAddr};
+use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
 
 fn main() -> Result<(), Error> {
@@ -81,7 +81,9 @@ fn parse_args() -> Result<Args, Error> {
     let server_addr = matches
         .value_of("SERVER_ADDR")
         .unwrap_or("127.0.0.1:8000")
-        .parse::<SocketAddr>()?;
+        .to_socket_addrs()?
+        .next()
+        .ok_or(Error::ArgError("Expected socket address"))?;
 
     if start_ts > end_ts {
         return Err(Error::ArgError("Start time must be <= end time"));

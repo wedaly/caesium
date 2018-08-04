@@ -3,4 +3,5 @@ tags
 perf.data
 perf.data.old
 db
+testdb
 tests/out

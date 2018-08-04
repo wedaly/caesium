@@ -82,10 +82,16 @@ Tests
 Docker
 ------
 
+Install [docker](https://docs.docker.com/install/) and [docker-compose](https://docs.docker.com/compose/install/).
+
 To build Docker images of the server and daemon:
 ```
-docker build -t caesium-daemon -f caesium-daemon/Dockerfile .
-docker build -t caesium-server -f caesium-server/Dockerfile .
+docker-compose build
+```
+
+To run the server and daemon locally:
+```
+docker-compose up
 ```
 
 

@@ -8,7 +8,8 @@ use caesium_server::run_server;
 use caesium_server::storage::error::StorageError;
 use caesium_server::storage::store::MetricStore;
 use clap::{App, Arg};
-use std::net::{AddrParseError, SocketAddr};
+use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
+use std::io;
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -43,7 +44,9 @@ fn parse_args() -> Result<Args, Error> {
     let server_addr = matches
         .value_of("SERVER_ADDR")
         .unwrap_or("127.0.0.1:8000")
-        .parse::<SocketAddr>()?;
+        .to_socket_addrs()?
+        .next()
+        .ok_or(Error::ArgError("Expected socket address"))?;
     Ok(Args {
         db_path,
         server_addr,
@@ -53,8 +56,10 @@ fn parse_args() -> Result<Args, Error> {
 #[derive(Debug)]
 enum Error {
     AddrParseError(AddrParseError),
+    IOError(io::Error),
     NetworkError(NetworkError),
     StorageError(StorageError),
+    ArgError(&'static str)
 }
 
 impl From<AddrParseError> for Error {
@@ -72,5 +77,11 @@ impl From<NetworkError> for Error {
 impl From<StorageError> for Error {
     fn from(err: StorageError) -> Error {
         Error::StorageError(err)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IOError(err)
     }
 }

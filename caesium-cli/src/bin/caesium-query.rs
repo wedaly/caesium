@@ -7,7 +7,8 @@ use caesium_core::network::message::Message;
 use caesium_core::network::result::QueryResult;
 use clap::{App, Arg};
 use std::io::stdin;
-use std::net::{AddrParseError, SocketAddr};
+use std::io;
+use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::process::exit;
 
 fn main() -> Result<(), Error> {
@@ -41,7 +42,9 @@ fn parse_args() -> Result<Args, Error> {
     let server_addr = matches
         .value_of("SERVER_ADDR")
         .unwrap_or("127.0.0.1:8000")
-        .parse::<SocketAddr>()?;
+        .to_socket_addrs()?
+        .next()
+        .ok_or(Error::ArgError("Expected socket address"))?;
     Ok(Args { server_addr })
 }
 
@@ -87,6 +90,8 @@ fn print_error(error: &str) {
 enum Error {
     AddrParseError(AddrParseError),
     NetworkError(NetworkError),
+    IOError(io::Error),
+    ArgError(&'static str)
 }
 
 impl From<AddrParseError> for Error {
@@ -98,5 +103,11 @@ impl From<AddrParseError> for Error {
 impl From<NetworkError> for Error {
     fn from(err: NetworkError) -> Error {
         Error::NetworkError(err)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IOError(err)
     }
 }

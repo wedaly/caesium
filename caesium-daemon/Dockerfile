@@ -1,8 +1,8 @@
 FROM rust:1.28.0
 
 ENV LOG_LEVEL info
-ENV LISTEN_PORT 8001
-ENV PUBLISH_PORT 8000
+ENV PORT 8001
+ENV PUBLISH_ADDR 0.0.0.0:8000
 ENV WINDOW_SIZE 30
 
 WORKDIR /usr/src/caesium
@@ -14,7 +14,7 @@ RUN cargo install --path caesium-daemon
 
 CMD RUST_LOG=caesium=$LOG_LEVEL \
     caesium-daemon \
-    --listen-addr "0.0.0.0:$LISTEN_PORT" \
-    --publish-addr "0.0.0.0:$PUBLISH_PORT" \
+    --listen-addr "0.0.0.0:$PORT" \
+    --publish-addr "$PUBLISH_ADDR" \
     -w $WINDOW_SIZE
 

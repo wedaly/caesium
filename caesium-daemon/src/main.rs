@@ -6,8 +6,9 @@ extern crate env_logger;
 use caesium_core::network::error::NetworkError;
 use caesium_daemon::run_daemon;
 use clap::{App, Arg};
-use std::net::{AddrParseError, SocketAddr};
+use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
+use std::io;
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -50,12 +51,16 @@ fn parse_args() -> Result<Args, Error> {
     let listen_addr = matches
         .value_of("LISTEN_ADDR")
         .unwrap_or("127.0.0.1:8001")
-        .parse::<SocketAddr>()?;
+        .to_socket_addrs()?
+        .next()
+        .ok_or(Error::ArgError("Expected socket address"))?;
 
     let publish_addr = matches
         .value_of("PUBLISH_ADDR")
         .unwrap_or("127.0.0.1:8000")
-        .parse::<SocketAddr>()?;
+        .to_socket_addrs()?
+        .next()
+        .ok_or(Error::ArgError("Expected socket address"))?;
 
     let window_size = matches
         .value_of("WINDOW_SIZE")
@@ -77,6 +82,7 @@ fn parse_args() -> Result<Args, Error> {
 enum Error {
     AddrParseError(AddrParseError),
     ParseIntError(ParseIntError),
+    IOError(io::Error),
     ArgError(&'static str),
     NetworkError(NetworkError),
 }
@@ -90,6 +96,12 @@ impl From<AddrParseError> for Error {
 impl From<ParseIntError> for Error {
     fn from(err: ParseIntError) -> Error {
         Error::ParseIntError(err)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IOError(err)
     }
 }
 
