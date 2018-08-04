@@ -7,3 +7,4 @@ authors = ["Will Daly"]
 caesium-core = { path = "../caesium-core" }
 clap = "2.32.0"
 rand = "0.4"
+rustyline = "1.0.0"

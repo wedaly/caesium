@@ -5,3 +5,4 @@ perf.data.old
 db
 testdb
 tests/out
+.caesium-query-history

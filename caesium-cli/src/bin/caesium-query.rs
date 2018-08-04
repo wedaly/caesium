@@ -1,5 +1,6 @@
 extern crate caesium_core;
 extern crate clap;
+extern crate rustyline;
 
 use caesium_core::network::client::Client;
 use caesium_core::network::error::NetworkError;
@@ -8,24 +9,35 @@ use caesium_core::network::result::QueryResult;
 use clap::{App, Arg};
 use std::env;
 use std::io;
-use std::io::Write;
-use std::io::stdin;
 use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::process::exit;
+use rustyline::Editor;
+use rustyline::error::ReadlineError;
+
+const HISTORY_FILE: &'static str = &".caesium-query-history";
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
     println!("Server address: {}", args.server_addr);
     let mut client = Client::new(args.server_addr);
+
+    let mut rl = Editor::<()>::new();
+    rl.load_history(HISTORY_FILE).unwrap_or_else(|_e| {});
     loop {
-        print!("> ");
-        io::stdout().flush()?;
-        let mut line = String::new();
-        match stdin().read_line(&mut line) {
-            Ok(_) => handle_query(&mut client, line.trim()),
-            Err(err) => println!("[ERROR] {:?}", err),
+        let line = rl.readline(">> ");
+        match line {
+            Ok(line) => {
+                rl.add_history_entry(&line);
+                handle_query(&mut client, line.trim())
+            }
+            Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
+                    break;
+            },
+            Err(err) => print_error(&format!("{:?}", err))
         }
     }
+    rl.save_history(HISTORY_FILE).unwrap();
+    Ok(())
 }
 
 #[derive(Debug)]
