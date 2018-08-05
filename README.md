@@ -81,8 +81,7 @@ RUST_LOG=caesium=debug
 Tests
 -----
 
-* To run the unit test suite: `cargo test`
-* To run the integration test suite: `./tests/run.sh` (must build the binaries first!)
+* To run the test suite: `cargo test`
 * To run performance (micro) benchmarks: `cargo bench`
 
 
