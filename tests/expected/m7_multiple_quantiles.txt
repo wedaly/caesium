@@ -1,4 +1,0 @@
-Server address: 127.0.0.1:8000
-start=30, end=60, phi=0.1, count=10, approx=2, lower=1, upper=10
-start=30, end=60, phi=0.5, count=10, approx=6, lower=4, upper=10
-start=30, end=60, phi=0.9, count=10, approx=10, lower=8, upper=10

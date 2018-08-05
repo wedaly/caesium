@@ -7,12 +7,12 @@ use caesium_core::network::error::NetworkError;
 use caesium_core::network::message::Message;
 use caesium_core::network::result::QueryResult;
 use clap::{App, Arg};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 use std::env;
 use std::io;
 use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::process::exit;
-use rustyline::Editor;
-use rustyline::error::ReadlineError;
 
 const HISTORY_FILE: &'static str = &".caesium-query-history";
 
@@ -31,9 +31,9 @@ fn main() -> Result<(), Error> {
                 handle_query(&mut client, line.trim())
             }
             Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
-                    break;
-            },
-            Err(err) => print_error(&format!("{:?}", err))
+                break;
+            }
+            Err(err) => print_error(&format!("{:?}", err)),
         }
     }
     rl.save_history(HISTORY_FILE).unwrap();

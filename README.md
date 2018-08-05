@@ -25,13 +25,6 @@ bash -c "echo -n \"foo:100|ms\" >/dev/udp/127.0.0.1/8001"
 
 The daemon flushes metrics to the backend server in 30 second windows.
 
-To insert data directly to the backend server (useful for testing):
-```
-docker-compose run cli bash
-$ seq 0 100 > data.txt
-$ caesium-insert foobar 0 30 data.txt
-```
-
 To query the server, you can use the `caesium-query` command line tool:
 ```
 docker-compose run cli caesium-query

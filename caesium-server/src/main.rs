@@ -4,7 +4,7 @@ extern crate clap;
 extern crate env_logger;
 
 use caesium_core::network::error::NetworkError;
-use caesium_server::run_server;
+use caesium_server::server::run_server;
 use caesium_server::storage::error::StorageError;
 use caesium_server::storage::store::MetricStore;
 use clap::{App, Arg};
