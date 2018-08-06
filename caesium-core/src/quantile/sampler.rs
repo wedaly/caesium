@@ -1,5 +1,6 @@
 use encode::{Decodable, Encodable, EncodableError};
-use rand::{weak_rng, Rng, XorShiftRng};
+use rand::rngs::SmallRng;
+use rand::{RngCore, FromEntropy};
 use std::io::{Read, Write};
 
 #[derive(Clone)]
@@ -7,7 +8,7 @@ pub struct Sampler {
     weight: usize,
     max_weight: usize, // Output item when stored weight >= max_weight
     val: u64,
-    generator: XorShiftRng,
+    generator: SmallRng,
 }
 
 impl Sampler {
@@ -16,7 +17,7 @@ impl Sampler {
             weight: 0,
             max_weight: 1,
             val: 0,
-            generator: weak_rng(),
+            generator: SmallRng::from_entropy()
         }
     }
 
@@ -120,7 +121,7 @@ where
             weight,
             max_weight,
             val,
-            generator: weak_rng(),
+            generator: SmallRng::from_entropy()
         };
         Ok(sampler)
     }
