@@ -1,6 +1,6 @@
 use encode::{Decodable, Encodable, EncodableError};
 use rand::rngs::SmallRng;
-use rand::{RngCore, FromEntropy};
+use rand::{FromEntropy, RngCore};
 use std::io::{Read, Write};
 
 #[derive(Clone)]
@@ -17,7 +17,7 @@ impl Sampler {
             weight: 0,
             max_weight: 1,
             val: 0,
-            generator: SmallRng::from_entropy()
+            generator: SmallRng::from_entropy(),
         }
     }
 
@@ -121,7 +121,7 @@ where
             weight,
             max_weight,
             val,
-            generator: SmallRng::from_entropy()
+            generator: SmallRng::from_entropy(),
         };
         Ok(sampler)
     }

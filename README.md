@@ -64,6 +64,14 @@ By default, the quantile tool inserts every value from the data file into a sing
 $ caesium-quantile data.txt -n 10
 ```
 
+Performance Testing
+-------------------
+
+To load test the daemon:
+```
+docker-compose run cli caesium-writer
+```
+
 
 Building Locally
 ----------------

@@ -86,6 +86,7 @@ version = "0.1.0"
 dependencies = [
  "caesium-core 0.1.0",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mio 0.6.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustyline 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
