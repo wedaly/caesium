@@ -1,5 +1,6 @@
 use caesium_core::network::message::Message;
 use caesium_core::quantile::writable::WritableSketch;
+use caesium_core::time::timestamp::TimeStamp;
 use caesium_core::time::window::TimeWindow;
 use circuit::CircuitState;
 use slab::Slab;
@@ -35,6 +36,7 @@ struct Processor<'a> {
     metric_name_idx: HashMap<String, usize>, // metric name to slab ID
     output: &'a Sender<Message>,
     circuit_lock: &'a Arc<RwLock<CircuitState>>,
+    window_start: Option<TimeStamp>,
 }
 
 impl<'a> Processor<'a> {
@@ -47,6 +49,7 @@ impl<'a> Processor<'a> {
             metric_states: Slab::new(),
             output,
             circuit_lock,
+            window_start: None,
         }
     }
 
@@ -80,6 +83,8 @@ impl<'a> Processor<'a> {
 
     fn process_close_cmd(&mut self, window: TimeWindow) {
         if self.is_circuit_closed() {
+            let window_start = self.window_start.unwrap_or(window.start());
+            let window = TimeWindow::new(window_start, window.end());
             for &metric_id in self.metric_name_idx.values() {
                 let state = self.metric_states.remove(metric_id);
                 let msg = Message::InsertReq {
@@ -91,7 +96,10 @@ impl<'a> Processor<'a> {
                     .send(msg)
                     .expect("Could not output message from processor");
             }
+            self.window_start = Some(window.end());
             self.metric_name_idx.clear();
+        } else {
+            self.window_start = self.window_start.or(Some(window.start()));
         }
     }
 
@@ -131,38 +139,77 @@ mod tests {
     #[test]
     fn it_inserts_new_metrics() {
         let commands = vec![
-            ProcessorCommand::InsertMetric("foo".to_string(), 1),
-            ProcessorCommand::InsertMetric("bar".to_string(), 2),
-            ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+            (
+                ProcessorCommand::InsertMetric("foo".to_string(), 1),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bar".to_string(), 2),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+                CircuitState::Closed,
+            ),
         ];
         let expected = vec![
             ("foo".to_string(), TimeWindow::new(30, 60), 1),
             ("bar".to_string(), TimeWindow::new(30, 60), 1),
         ];
-        assert_processor(commands, expected, CircuitState::Closed);
+        assert_processor(commands, expected);
     }
 
     #[test]
     fn it_updates_existing_metrics() {
         let commands = vec![
-            ProcessorCommand::InsertMetric("foo".to_string(), 1),
-            ProcessorCommand::InsertMetric("foo".to_string(), 2),
-            ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+            (
+                ProcessorCommand::InsertMetric("foo".to_string(), 1),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::InsertMetric("foo".to_string(), 2),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+                CircuitState::Closed,
+            ),
         ];
         let expected = vec![("foo".to_string(), TimeWindow::new(30, 60), 2)];
-        assert_processor(commands, expected, CircuitState::Closed);
+        assert_processor(commands, expected);
     }
 
     #[test]
     fn it_flushes_metrics_on_window_close() {
         let commands = vec![
-            ProcessorCommand::InsertMetric("foo".to_string(), 1),
-            ProcessorCommand::InsertMetric("bar".to_string(), 2),
-            ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
-            ProcessorCommand::InsertMetric("baz".to_string(), 3),
-            ProcessorCommand::InsertMetric("bat".to_string(), 4),
-            ProcessorCommand::CloseWindow(TimeWindow::new(60, 90)),
-            ProcessorCommand::CloseWindow(TimeWindow::new(90, 120)),
+            (
+                ProcessorCommand::InsertMetric("foo".to_string(), 1),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bar".to_string(), 2),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::InsertMetric("baz".to_string(), 3),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bat".to_string(), 4),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(60, 90)),
+                CircuitState::Closed,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(90, 120)),
+                CircuitState::Closed,
+            ),
         ];
         let expected = vec![
             ("foo".to_string(), TimeWindow::new(30, 60), 1),
@@ -170,34 +217,99 @@ mod tests {
             ("baz".to_string(), TimeWindow::new(60, 90), 1),
             ("bat".to_string(), TimeWindow::new(60, 90), 1),
         ];
-        assert_processor(commands, expected, CircuitState::Closed);
+        assert_processor(commands, expected);
     }
 
     #[test]
     fn it_does_not_flush_if_circuit_open() {
         let commands = vec![
-            ProcessorCommand::InsertMetric("foo".to_string(), 1),
-            ProcessorCommand::InsertMetric("bar".to_string(), 2),
-            ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
-            ProcessorCommand::InsertMetric("baz".to_string(), 3),
-            ProcessorCommand::InsertMetric("bat".to_string(), 4),
-            ProcessorCommand::CloseWindow(TimeWindow::new(60, 90)),
-            ProcessorCommand::CloseWindow(TimeWindow::new(90, 120)),
+            (
+                ProcessorCommand::InsertMetric("foo".to_string(), 1),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bar".to_string(), 2),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::InsertMetric("baz".to_string(), 3),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bat".to_string(), 4),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(60, 90)),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(90, 120)),
+                CircuitState::Open,
+            ),
         ];
         let expected = vec![];
-        assert_processor(commands, expected, CircuitState::Open);
+        assert_processor(commands, expected);
+    }
+
+    #[test]
+    fn it_flushes_when_circuit_closes() {
+        let commands = vec![
+            (
+                ProcessorCommand::InsertMetric("foo".to_string(), 1),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bar".to_string(), 2),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(30, 60)),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::InsertMetric("baz".to_string(), 3),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::InsertMetric("bat".to_string(), 4),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(60, 90)),
+                CircuitState::Open,
+            ),
+            (
+                ProcessorCommand::CloseWindow(TimeWindow::new(90, 120)),
+                CircuitState::Closed,
+            ),
+        ];
+        let expected = vec![
+            ("foo".to_string(), TimeWindow::new(30, 120), 1),
+            ("bar".to_string(), TimeWindow::new(30, 120), 1),
+            ("baz".to_string(), TimeWindow::new(30, 120), 1),
+            ("bat".to_string(), TimeWindow::new(30, 120), 1),
+        ];
+        assert_processor(commands, expected);
     }
 
     fn assert_processor(
-        mut commands: Vec<ProcessorCommand>,
+        mut commands: Vec<(ProcessorCommand, CircuitState)>,
         mut expected: Vec<(String, TimeWindow, usize)>,
-        circuit_state: CircuitState,
     ) {
         let (tx, rx) = channel();
-        let circuit_lock = Arc::new(RwLock::new(circuit_state));
+        let circuit_lock = Arc::new(RwLock::new(CircuitState::Closed));
         {
             let mut p = Processor::new(&tx, &circuit_lock);
-            for cmd in commands.drain(..) {
+            for (cmd, circuit_state) in commands.drain(..) {
+                {
+                    let mut cs = circuit_lock.write().unwrap();
+                    *cs = circuit_state;
+                }
                 p.process_cmd(cmd);
             }
         }
