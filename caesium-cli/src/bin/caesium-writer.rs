@@ -16,7 +16,10 @@ fn main() -> Result<(), Error> {
     let poll = Poll::new()?;
     let mut writers = init_writers(&args.daemon_addr, args.num_writers, args.num_metrics)?;
     register_writers(&writers, &poll)?;
-    println!("Writing to daemon at {}, num_writers={}, num_metrics={}", args.daemon_addr, args.num_writers, args.num_metrics);
+    println!(
+        "Writing to daemon at {}, num_writers={}, num_metrics={}",
+        args.daemon_addr, args.num_writers, args.num_metrics
+    );
     run_event_loop(&poll, &mut writers)
 }
 

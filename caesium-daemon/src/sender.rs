@@ -1,8 +1,6 @@
 use caesium_core::network::client::Client;
 use caesium_core::network::message::Message;
-use caesium_core::time::window::TimeWindow;
 use circuit::CircuitState;
-use state::MetricState;
 use std::cmp::min;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock};
@@ -11,12 +9,12 @@ use std::time::Duration;
 
 pub fn sender_thread(
     mut client: Client,
-    input: Receiver<MetricState>,
+    input: Receiver<Message>,
     circuit: Arc<RwLock<CircuitState>>,
 ) {
     loop {
         match input.recv() {
-            Ok(metric_state) => send_until_success(metric_state, &mut client, &circuit),
+            Ok(msg) => send_until_success(msg, &mut client, &circuit),
             Err(_) => {
                 info!("Channel closed, stopping sender thread");
                 break;
@@ -32,18 +30,13 @@ enum SendResult {
 }
 
 fn send_until_success(
-    metric_state: MetricState,
+    msg: Message,
     mut client: &mut Client,
     circuit_lock: &Arc<RwLock<CircuitState>>,
 ) {
-    let req = Message::InsertReq {
-        metric: metric_state.metric_name,
-        window: TimeWindow::new(metric_state.window_start, metric_state.window_end),
-        sketch: metric_state.sketch,
-    };
     let mut retry_count = 0usize;
     loop {
-        match send_to_backend(&req, &mut client) {
+        match send_to_backend(&msg, &mut client) {
             SendResult::Success | SendResult::PermanentFailure => {
                 set_circuit_state(circuit_lock, CircuitState::Closed);
                 break;

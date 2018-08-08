@@ -9,11 +9,10 @@ extern crate lazy_static;
 extern crate log;
 
 mod circuit;
-mod command;
 mod listener;
 mod processor;
 mod sender;
-mod state;
+mod window;
 
 use caesium_core::network::client::Client;
 use caesium_core::network::error::NetworkError;
@@ -36,13 +35,13 @@ pub fn run_daemon(
     let (circuit_ref1, circuit_ref2) = shared_circuit();
     let (listener_out, processor_in) = channel();
     let (processor_out, sender_in) = channel();
-    thread::spawn(move || processor_thread(window_size, processor_in, processor_out, circuit_ref1));
+    thread::spawn(move || processor_thread(processor_in, processor_out, circuit_ref1));
     thread::spawn(move || sender_thread(client, sender_in, circuit_ref2));
     info!(
         "Listening on {}, publishing to {}",
         listen_addr, publish_addr
     );
-    listener_thread(socket, listener_out)
+    listener_thread(socket, listener_out, window_size)
 }
 
 fn shared_circuit() -> (Arc<RwLock<CircuitState>>, Arc<RwLock<CircuitState>>) {
