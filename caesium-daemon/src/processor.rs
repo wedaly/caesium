@@ -107,13 +107,13 @@ impl<'a> Processor<'a> {
     }
 }
 
-pub struct MetricState {
-    pub metric_name: String,
-    pub sketch: WritableSketch,
+struct MetricState {
+    metric_name: String,
+    sketch: WritableSketch,
 }
 
 impl MetricState {
-    pub fn new(metric_name: &str, value: u64) -> MetricState {
+    fn new(metric_name: &str, value: u64) -> MetricState {
         let mut sketch = WritableSketch::new();
         sketch.insert(value);
         MetricState {
