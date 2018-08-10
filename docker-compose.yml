@@ -19,7 +19,7 @@ services:
         environment:
             - LOG_LEVEL=debug
             - PORT=8001
-            - PUBLISH_ADDR=server:8000
+            - PUBLISH_ADDR=server:8001
         build:
             context: .
             dockerfile: ./caesium-daemon/Dockerfile
@@ -28,7 +28,7 @@ services:
     cli:
         image: caesium-cli
         environment:
-            - CAESIUM_SERVER_ADDR=server:8000
+            - CAESIUM_SERVER_QUERY_ADDR=server:8000
             - CAESIUM_DAEMON_ADDR=daemon:8001
         build:
             context: .

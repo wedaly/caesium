@@ -1,6 +1,4 @@
-use encode::{Decodable, Encodable, EncodableError};
 use quantile::minmax::MinMax;
-use std::io::{Read, Write};
 
 // Estimated empirically, depends on sketch size
 const EPSILON: f32 = 0.015;
@@ -24,37 +22,6 @@ pub struct ApproxQuantile {
     pub approx_value: u64,
     pub lower_bound: u64,
     pub upper_bound: u64,
-}
-
-impl<W> Encodable<W> for ApproxQuantile
-where
-    W: Write,
-{
-    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        self.count.encode(writer)?;
-        self.approx_value.encode(writer)?;
-        self.lower_bound.encode(writer)?;
-        self.upper_bound.encode(writer)?;
-        Ok(())
-    }
-}
-
-impl<R> Decodable<ApproxQuantile, R> for ApproxQuantile
-where
-    R: Read,
-{
-    fn decode(reader: &mut R) -> Result<ApproxQuantile, EncodableError> {
-        let count = usize::decode(reader)?;
-        let approx_value = u64::decode(reader)?;
-        let lower_bound = u64::decode(reader)?;
-        let upper_bound = u64::decode(reader)?;
-        Ok(ApproxQuantile {
-            count,
-            approx_value,
-            lower_bound,
-            upper_bound,
-        })
-    }
 }
 
 #[derive(Debug)]

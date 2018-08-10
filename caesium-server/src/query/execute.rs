@@ -1,8 +1,15 @@
-use caesium_core::network::result::QueryResult;
+use caesium_core::quantile::readable::ApproxQuantile;
+use caesium_core::time::window::TimeWindow;
 use query::build::build_query;
 use query::error::QueryError;
 use query::ops::OpOutput;
 use storage::datasource::DataSource;
+
+#[derive(Debug)]
+pub enum QueryResult {
+    QuantileWindow(TimeWindow, f64, ApproxQuantile),
+    MetricName(String),
+}
 
 pub fn execute_query<'a>(query: &str, source: &DataSource) -> Result<Vec<QueryResult>, QueryError> {
     let mut pipeline = build_query(query, source)?;

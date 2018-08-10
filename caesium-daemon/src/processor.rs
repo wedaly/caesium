@@ -1,4 +1,4 @@
-use caesium_core::network::message::Message;
+use caesium_core::protocol::messages::InsertMessage;
 use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
 use caesium_core::time::window::TimeWindow;
@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock};
 
 pub fn processor_thread(
     input: Receiver<ProcessorCommand>,
-    output: Sender<Message>,
+    output: Sender<InsertMessage>,
     circuit_lock: Arc<RwLock<CircuitState>>,
 ) {
     let mut p = Processor::new(&output, &circuit_lock);
@@ -34,14 +34,14 @@ pub enum ProcessorCommand {
 struct Processor<'a> {
     metric_states: Slab<MetricState>,
     metric_name_idx: HashMap<String, usize>, // metric name to slab ID
-    output: &'a Sender<Message>,
+    output: &'a Sender<InsertMessage>,
     circuit_lock: &'a Arc<RwLock<CircuitState>>,
     window_start: Option<TimeStamp>,
 }
 
 impl<'a> Processor<'a> {
     pub fn new(
-        output: &'a Sender<Message>,
+        output: &'a Sender<InsertMessage>,
         circuit_lock: &'a Arc<RwLock<CircuitState>>,
     ) -> Processor<'a> {
         Processor {
@@ -87,10 +87,10 @@ impl<'a> Processor<'a> {
             let window = TimeWindow::new(window_start, window.end());
             for &metric_id in self.metric_name_idx.values() {
                 let state = self.metric_states.remove(metric_id);
-                let msg = Message::InsertReq {
+                let msg = InsertMessage {
                     metric: state.metric_name,
-                    sketch: state.sketch,
                     window,
+                    sketch: state.sketch,
                 };
                 self.output
                     .send(msg)
@@ -316,14 +316,7 @@ mod tests {
         drop(tx);
         let mut output: Vec<(String, TimeWindow, usize)> = rx
             .iter()
-            .map(|msg| match msg {
-                Message::InsertReq {
-                    metric,
-                    window,
-                    sketch,
-                } => (metric.clone(), window, sketch.count()),
-                _ => panic!("Unexpected message type"),
-            })
+            .map(|msg| (msg.metric.to_string(), msg.window, msg.sketch.count()))
             .collect();
         expected.sort_unstable();
         output.sort_unstable();

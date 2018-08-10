@@ -9,17 +9,18 @@ extern crate lazy_static;
 extern crate log;
 
 mod circuit;
+mod client;
 mod listener;
 mod processor;
 mod sender;
 mod window;
 
-use caesium_core::network::client::Client;
-use caesium_core::network::error::NetworkError;
 use circuit::CircuitState;
+use client::Client;
 use listener::listener_thread;
 use processor::processor_thread;
 use sender::sender_thread;
+use std::io;
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
@@ -29,7 +30,7 @@ pub fn run_daemon(
     listen_addr: SocketAddr,
     publish_addr: SocketAddr,
     window_size: u64,
-) -> Result<(), NetworkError> {
+) -> Result<(), io::Error> {
     let socket = UdpSocket::bind(listen_addr)?;
     let client = Client::new(publish_addr);
     let (circuit_ref1, circuit_ref2) = shared_circuit();

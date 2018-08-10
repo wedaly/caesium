@@ -5,15 +5,16 @@ authors = ["Will Daly"]
 
 [dependencies]
 bencher = "0.1.5"
+bytes = "0.4.9"
 caesium-core = { path = "../caesium-core" }
 clap = "2.32.0"
 env_logger = "0.5.10"
 lazy_static = "1.0.2"
 log = "0.4"
+mio = "0.6.15"
 regex = "1"
 rocksdb = "0.10.1"
 slab = "0.4"
-tokio = "0.1.7"
 uuid = { version = "0.6", features = ["v4"] }
 
 [[bench]]

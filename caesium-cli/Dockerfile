@@ -1,7 +1,5 @@
 From rust:1.28.0
 
-ENV CAESIUM_SERVER_ADDR 0.0.0.0:8000
-
 WORKDIR /usr/src/caesium
 
 # Assumes the build context directory is the git repository root

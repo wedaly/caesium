@@ -1,7 +1,9 @@
+extern crate bytes;
 extern crate caesium_core;
+extern crate mio;
 extern crate regex;
 extern crate rocksdb;
-extern crate tokio;
+extern crate slab;
 extern crate uuid;
 
 #[macro_use]

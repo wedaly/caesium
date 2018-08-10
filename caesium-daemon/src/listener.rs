@@ -1,4 +1,3 @@
-use caesium_core::network::error::NetworkError;
 use caesium_core::time::clock::SystemClock;
 use processor::ProcessorCommand;
 use regex::Regex;
@@ -16,7 +15,7 @@ pub fn listener_thread(
     socket: UdpSocket,
     out: Sender<ProcessorCommand>,
     window_size: u64,
-) -> Result<(), NetworkError> {
+) -> Result<(), io::Error> {
     let clock = SystemClock::new();
     let mut window_tracker = WindowTracker::new(window_size, &clock);
     let mut buf = [0; MAX_MSG_LEN];

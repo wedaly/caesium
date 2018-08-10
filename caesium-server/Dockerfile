@@ -1,7 +1,11 @@
 FROM rust:1.28.0
 
 ENV LOG_LEVEL info
-ENV PORT 8000
+ENV QUERY_PORT 8000
+ENV INSERT_PORT 8001
+ENV NUM_READ_WORKERS 5
+ENV NUM_WRITE_WORKERS 5
+ENV DOWNSAMPLE_INTERVAL 600
 
 VOLUME /data
 
@@ -22,5 +26,9 @@ RUN cargo install --path caesium-server
 
 CMD RUST_LOG=caesium=$LOG_LEVEL \
     caesium-server \
-    --addr "0.0.0.0:$PORT" \
-    --db-path "/data/db"
+    --db-path "/data/db" \
+    --num-read-workers "$NUM_READ_WORKERS" \
+    --num-write-workers "$NUM_WRITE_WORKERS" \
+    --query-addr "0.0.0.0:$QUERY_PORT" \
+    --insert-addr "0.0.0.0:$INSERT_PORT" \
+    --downsample-interval "$DOWNSAMPLE_INTERVAL"

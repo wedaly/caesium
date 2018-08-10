@@ -1,6 +1,6 @@
-use caesium_core::network::client::Client;
-use caesium_core::network::message::Message;
+use caesium_core::protocol::messages::InsertMessage;
 use circuit::CircuitState;
+use client::Client;
 use std::cmp::min;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock};
@@ -9,7 +9,7 @@ use std::time::Duration;
 
 pub fn sender_thread(
     mut client: Client,
-    input: Receiver<Message>,
+    input: Receiver<InsertMessage>,
     circuit: Arc<RwLock<CircuitState>>,
 ) {
     loop {
@@ -25,23 +25,23 @@ pub fn sender_thread(
 
 enum SendResult {
     Success,
-    TransientFailure,
-    PermanentFailure,
+    RetryLater,
 }
 
 fn send_until_success(
-    msg: Message,
+    msg: InsertMessage,
     mut client: &mut Client,
     circuit_lock: &Arc<RwLock<CircuitState>>,
 ) {
     let mut retry_count = 0usize;
     loop {
         match send_to_backend(&msg, &mut client) {
-            SendResult::Success | SendResult::PermanentFailure => {
+            SendResult::Success => {
+                debug!("Sent insert message to backend for metric {:?}", msg.metric);
                 set_circuit_state(circuit_lock, CircuitState::Closed);
                 break;
             }
-            SendResult::TransientFailure => {
+            SendResult::RetryLater => {
                 set_circuit_state(circuit_lock, CircuitState::Open);
             }
         }
@@ -56,23 +56,12 @@ fn send_until_success(
     }
 }
 
-fn send_to_backend(req: &Message, client: &mut Client) -> SendResult {
-    match client.request(&req) {
-        Ok(Message::InsertSuccessResp) => {
-            debug!("Sent metric to server");
-            SendResult::Success
-        }
-        Ok(Message::ErrorResp(err)) => {
-            error!("Error response from server: {:?}", err);
-            SendResult::PermanentFailure
-        }
-        Ok(_) => {
-            error!("Unexpected response message type");
-            SendResult::PermanentFailure
-        }
+fn send_to_backend(msg: &InsertMessage, client: &mut Client) -> SendResult {
+    match client.send(&msg) {
+        Ok(_) => SendResult::Success,
         Err(err) => {
-            error!("Error sending to server: {:?}", err);
-            SendResult::TransientFailure
+            error!("Error sending message to backend: {:?}", err);
+            SendResult::RetryLater
         }
     }
 }

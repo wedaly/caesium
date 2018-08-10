@@ -1,39 +1,35 @@
-extern crate caesium_core;
 extern crate clap;
 extern crate rustyline;
 
-use caesium_core::network::client::Client;
-use caesium_core::network::error::NetworkError;
-use caesium_core::network::message::Message;
-use caesium_core::network::result::QueryResult;
 use clap::{App, Arg};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
 use std::io;
-use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
-use std::process::exit;
+use std::io::{Read, Write};
+use std::net::{AddrParseError, Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
+const READ_TIMEOUT_MS: u64 = 10000;
 const HISTORY_FILE: &'static str = &".caesium-query-history";
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
     println!("Server address: {}", args.server_addr);
-    let mut client = Client::new(args.server_addr);
-
     let mut rl = Editor::<()>::new();
     rl.load_history(HISTORY_FILE).unwrap_or_else(|_e| {});
     loop {
-        let line = rl.readline(">> ");
-        match line {
-            Ok(line) => {
-                rl.add_history_entry(&line);
-                handle_query(&mut client, line.trim())
-            }
-            Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
+        let result = rl
+            .readline(">> ")
+            .map_err(|err| Error::from(err))
+            .and_then(|line| handle_query(&args.server_addr, line.trim()));
+        match result {
+            Ok(output) => print!("{}", output),
+            Err(Error::ReadlineError(ReadlineError::Eof))
+            | Err(Error::ReadlineError(ReadlineError::Interrupted)) => {
                 break;
             }
-            Err(err) => print_error(&format!("{:?}", err)),
+            Err(err) => println!("[ERROR] {:?}", err),
         }
     }
     rl.save_history(HISTORY_FILE).unwrap();
@@ -53,11 +49,11 @@ fn parse_args() -> Result<Args, Error> {
                 .short("a")
                 .long("addr")
                 .takes_value(true)
-                .help("IP address and port of the backend server (defaults to $CAESIUM_SERVER_ADDR, then 127.0.0.1:8000)"),
+                .help("Network address of server (defaults to $CAESIUM_SERVER_QUERY_ADDR, then 127.0.0.1:8000)"),
         )
         .get_matches();
     let default_addr =
-        env::var("CAESIUM_SERVER_ADDR").unwrap_or_else(|_| "127.0.0.1:8000".to_string());
+        env::var("CAESIUM_SERVER_QUERY_ADDR").unwrap_or_else(|_| "127.0.0.1:8000".to_string());
     let server_addr = matches
         .value_of("SERVER_ADDR")
         .unwrap_or(&default_addr)
@@ -67,50 +63,26 @@ fn parse_args() -> Result<Args, Error> {
     Ok(Args { server_addr })
 }
 
-fn handle_query(client: &mut Client, q: &str) {
+fn handle_query(addr: &SocketAddr, q: &str) -> Result<String, Error> {
     if q.is_empty() {
-        exit(0);
+        return Ok("".to_string());
     }
 
-    let req = Message::QueryReq(q.to_string());
-    match client.request(&req) {
-        Ok(Message::QuerySuccessResp(results)) => print_results(&results),
-        Ok(Message::ErrorResp(err)) => print_error(&err),
-        Ok(_) => print_error("Unexpected response message type"),
-        Err(err) => print_error(&format!("Unexpected error: {:?}", err)),
-    }
-}
-
-fn print_results(results: &[QueryResult]) {
-    for r in results.iter() {
-        match r {
-            QueryResult::QuantileWindow(window, phi, quantile) => {
-                println!(
-                    "start={}, end={}, phi={}, count={}, approx={}, lower={}, upper={}",
-                    window.start(),
-                    window.end(),
-                    phi,
-                    quantile.count,
-                    quantile.approx_value,
-                    quantile.lower_bound,
-                    quantile.upper_bound
-                );
-            }
-            QueryResult::MetricName(metric) => println!("{}", metric),
-        }
-    }
-}
-
-fn print_error(error: &str) {
-    println!("[ERROR] {}", error);
+    let timeout = Duration::from_millis(READ_TIMEOUT_MS);
+    let mut stream = TcpStream::connect_timeout(addr, timeout)?;
+    stream.write_all(q.as_bytes())?;
+    stream.shutdown(Shutdown::Write)?;
+    let mut resp = String::new();
+    stream.read_to_string(&mut resp)?;
+    Ok(resp)
 }
 
 #[derive(Debug)]
 enum Error {
     AddrParseError(AddrParseError),
-    NetworkError(NetworkError),
     IOError(io::Error),
     ArgError(&'static str),
+    ReadlineError(ReadlineError),
 }
 
 impl From<AddrParseError> for Error {
@@ -119,14 +91,14 @@ impl From<AddrParseError> for Error {
     }
 }
 
-impl From<NetworkError> for Error {
-    fn from(err: NetworkError) -> Error {
-        Error::NetworkError(err)
-    }
-}
-
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IOError(err)
+    }
+}
+
+impl From<ReadlineError> for Error {
+    fn from(err: ReadlineError) -> Error {
+        Error::ReadlineError(err)
     }
 }

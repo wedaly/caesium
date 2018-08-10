@@ -3,6 +3,6 @@ extern crate slab;
 
 #[macro_use]
 pub mod encode;
-pub mod network;
+pub mod protocol;
 pub mod quantile;
 pub mod time;

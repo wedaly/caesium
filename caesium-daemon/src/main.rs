@@ -3,7 +3,6 @@ extern crate caesium_daemon;
 extern crate clap;
 extern crate env_logger;
 
-use caesium_core::network::error::NetworkError;
 use caesium_daemon::run_daemon;
 use clap::{App, Arg};
 use std::io;
@@ -57,7 +56,7 @@ fn parse_args() -> Result<Args, Error> {
 
     let publish_addr = matches
         .value_of("PUBLISH_ADDR")
-        .unwrap_or("127.0.0.1:8000")
+        .unwrap_or("127.0.0.1:8001")
         .to_socket_addrs()?
         .next()
         .ok_or(Error::ArgError("Expected socket address"))?;
@@ -84,7 +83,6 @@ enum Error {
     ParseIntError(ParseIntError),
     IOError(io::Error),
     ArgError(&'static str),
-    NetworkError(NetworkError),
 }
 
 impl From<AddrParseError> for Error {
@@ -102,11 +100,5 @@ impl From<ParseIntError> for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IOError(err)
-    }
-}
-
-impl From<NetworkError> for Error {
-    fn from(err: NetworkError) -> Error {
-        Error::NetworkError(err)
     }
 }

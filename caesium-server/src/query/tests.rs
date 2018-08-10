@@ -1,8 +1,7 @@
-use caesium_core::network::result::QueryResult;
 use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
 use caesium_core::time::window::TimeWindow;
-use query::execute::execute_query;
+use query::execute::{execute_query, QueryResult};
 use storage::datasource::DataRow;
 use storage::mock::MockDataSource;
 
