@@ -48,7 +48,7 @@ Caesium includes a command-line tool for measuring the error introduced by its q
 
 Example:
 ```
-docker-compose run cli bash
+docker-compose run cli sh
 $ seq 0 100 > data.txt
 $ caesium-quantile data.txt
 ```
