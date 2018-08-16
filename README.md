@@ -13,6 +13,8 @@ To start the server and daemon locally:
 docker-compose up
 ```
 
+This will also start a load testing program that inserts one metric per second to the daemon.
+
 
 Inserting and Querying
 ----------------------
@@ -62,14 +64,6 @@ This will report:
 By default, the quantile tool inserts every value from the data file into a single sketch.  You can measure the error introduced by merging sketches by specifying the number of merges.  For example, to split the dataset into ten sketches that are merged:
 ```
 $ caesium-quantile data.txt -n 10
-```
-
-Performance Testing
--------------------
-
-To load test the daemon:
-```
-docker-compose run cli caesium-writer
 ```
 
 
