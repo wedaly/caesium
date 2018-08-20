@@ -28,7 +28,8 @@ services:
     load:
         image: caesium-load
         environment:
-            - DAEMON_ADDR=daemon:8001
+            - DAEMON_HOST=daemon
+            - DAEMON_PORT=8001
         build:
             context: .
             dockerfile: ./caesium-load/Dockerfile

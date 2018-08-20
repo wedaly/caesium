@@ -1,6 +1,7 @@
 From alpine:edge
 
-ENV DAEMON_ADDR 127.0.0.1:8001
+ENV DAEMON_HOST 127.0.0.1
+ENV DAEMON_PORT 8001
 ENV NUM_WRITERS 1
 ENV NUM_METRICS 10
 ENV RATE_LIMIT 1
@@ -18,7 +19,7 @@ RUN apk update && \
     rm -rf /root/.cargo
 
 CMD caesium-load \
-    --daemon-addr $DAEMON_ADDR \
+    --daemon-addr "$DAEMON_HOST:$DAEMON_PORT" \
     --num-writers $NUM_WRITERS \
     -m $NUM_METRICS \
     -r $RATE_LIMIT
