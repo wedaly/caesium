@@ -1,6 +1,5 @@
 FROM alpine:edge
 
-ENV LOG_LEVEL info
 ENV QUERY_PORT 8000
 ENV INSERT_PORT 8001
 ENV NUM_READ_WORKERS 5
@@ -21,7 +20,7 @@ RUN apk update && \
     rm -rf /usr/src/caesium/* && \
     rm -rf /root/.cargo
 
-CMD RUST_LOG=caesium=$LOG_LEVEL \
+CMD SERVICE_NAME=caesium-server \
     caesium-server \
     --db-path "/data/db" \
     --num-read-workers "$NUM_READ_WORKERS" \

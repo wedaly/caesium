@@ -18,7 +18,8 @@ RUN apk update && \
     rm -rf /usr/src/caesium/* && \
     rm -rf /root/.cargo
 
-CMD caesium-load \
+CMD SERVICE_NAME="caesium-load" \
+    caesium-load \
     --daemon-addr "$DAEMON_HOST:$DAEMON_PORT" \
     --num-writers $NUM_WRITERS \
     -m $NUM_METRICS \

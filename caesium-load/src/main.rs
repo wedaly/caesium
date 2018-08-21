@@ -1,15 +1,21 @@
 extern crate caesium_load;
 extern crate clap;
+extern crate stackdriver_logger;
+
+#[macro_use]
+extern crate log;
 
 use caesium_load::generate_load;
 use clap::{App, Arg};
+use std::env;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
 
 fn main() -> Result<(), Error> {
+    init_logger();
     let args = parse_args()?;
-    println!(
+    info!(
         "Writing to daemon at {}, num_writers={}, num_metrics={}, rate_limit={:?}",
         args.daemon_addr, args.num_writers, args.num_metrics, args.rate_limit
     );
@@ -19,6 +25,13 @@ fn main() -> Result<(), Error> {
         args.num_metrics,
         args.rate_limit,
     ).map_err(From::from)
+}
+
+fn init_logger() {
+    if let Err(_) = env::var("RUST_LOG") {
+        env::set_var("RUST_LOG", "caesium=debug");
+    }
+    stackdriver_logger::init();
 }
 
 #[derive(Debug)]

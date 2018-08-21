@@ -1,7 +1,7 @@
 extern crate caesium_core;
 extern crate caesium_server;
 extern crate clap;
-extern crate env_logger;
+extern crate stackdriver_logger;
 
 #[macro_use]
 extern crate log;
@@ -13,6 +13,7 @@ use caesium_server::storage::downsample::strategies::DefaultStrategy;
 use caesium_server::storage::error::StorageError;
 use caesium_server::storage::store::MetricStore;
 use clap::{App, Arg};
+use std::env;
 use std::io;
 use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
@@ -21,7 +22,7 @@ use std::thread;
 use std::time::Duration;
 
 fn main() -> Result<(), Error> {
-    env_logger::init();
+    init_logger();
     let args = parse_args()?;
     let db = MetricStore::open(&args.db_path)?;
     let db_ref = Arc::new(db);
@@ -36,6 +37,13 @@ fn main() -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+fn init_logger() {
+    if let Err(_) = env::var("RUST_LOG") {
+        env::set_var("RUST_LOG", "caesium=debug");
+    }
+    stackdriver_logger::init();
 }
 
 fn start_downsample_thread(interval: Duration, db_ref: Arc<MetricStore>) -> thread::JoinHandle<()> {

@@ -74,11 +74,6 @@ Building Locally
 2. Build the project: `cargo build`
 3. Binaries will be written to the "target" directory.
 
-To enable logging to stdout when running binaries, set the environment variable:
-```
-RUST_LOG=caesium=debug
-```
-
 
 Tests
 -----

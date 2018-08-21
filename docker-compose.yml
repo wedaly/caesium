@@ -7,7 +7,6 @@ services:
         ports:
             - "8000:8000/tcp"
         environment:
-            - LOG_LEVEL=debug
             - PORT=8000
         build:
             context: .
@@ -17,7 +16,6 @@ services:
         ports:
             - "8001:8001/udp"
         environment:
-            - LOG_LEVEL=debug
             - PORT=8001
             - PUBLISH_ADDR=server:8001
         build:

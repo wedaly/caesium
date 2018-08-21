@@ -1,19 +1,27 @@
 extern crate caesium_core;
 extern crate caesium_daemon;
 extern crate clap;
-extern crate env_logger;
+extern crate stackdriver_logger;
 
 use caesium_daemon::run_daemon;
 use clap::{App, Arg};
+use std::env;
 use std::io;
 use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
 
 fn main() -> Result<(), Error> {
-    env_logger::init();
+    init_logger();
     let args = parse_args()?;
     run_daemon(args.listen_addr, args.publish_addr, args.window_size)?;
     Ok(())
+}
+
+fn init_logger() {
+    if let Err(_) = env::var("RUST_LOG") {
+        env::set_var("RUST_LOG", "caesium=debug");
+    }
+    stackdriver_logger::init();
 }
 
 #[derive(Debug)]
