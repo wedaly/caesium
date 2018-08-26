@@ -5,7 +5,6 @@ use quantile::readable::{ReadableSketch, WeightedValue};
 use quantile::sampler::Sampler;
 use slab::Slab;
 use std::cmp::min;
-use std::fmt;
 use std::io::{Read, Write};
 use std::ops::RangeInclusive;
 
@@ -22,7 +21,7 @@ const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
     2, 2, 2, 2, 2,
 ];
 
-pub struct WritableSketch {
+pub struct KllSketch {
     count: usize,
     level: u8,
     size: usize,
@@ -34,13 +33,13 @@ pub struct WritableSketch {
     compactor_map: [Option<usize>; LEVEL_LIMIT as usize], // Level to compactor slab ID
 }
 
-impl WritableSketch {
-    pub fn new() -> WritableSketch {
+impl KllSketch {
+    pub fn new() -> KllSketch {
         let mut compactor_slab = Slab::new();
         let mut compactor_map = [None; LEVEL_LIMIT as usize];
         let cid = compactor_slab.insert(Compactor::new());
         compactor_map[0] = Some(cid);
-        WritableSketch {
+        KllSketch {
             count: 0,
             level: 0,
             size: 0,
@@ -59,7 +58,7 @@ impl WritableSketch {
         minmax: MinMax,
         sampler: Sampler,
         mut compactors: Vec<Compactor>,
-    ) -> WritableSketch {
+    ) -> KllSketch {
         assert!(level as usize + compactors.len() < LEVEL_LIMIT as usize);
         assert!(!compactors.is_empty());
         let compactor_count = compactors.len();
@@ -71,7 +70,7 @@ impl WritableSketch {
             compactor_map[compactor_level as usize] = Some(cid);
         }
 
-        let mut s = WritableSketch {
+        let mut s = KllSketch {
             count,
             level,
             size: 0,
@@ -101,7 +100,7 @@ impl WritableSketch {
         }
     }
 
-    pub fn merge(self, other: WritableSketch) -> WritableSketch {
+    pub fn merge(self, other: KllSketch) -> KllSketch {
         let (mut survivor, mut victim) = if self.level > other.level {
             (self, other)
         } else {
@@ -302,13 +301,7 @@ impl WritableSketch {
     }
 }
 
-impl fmt::Debug for WritableSketch {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "WritableSketch {{\n\tlevel: {}\n}}", self.level)
-    }
-}
-
-impl Clone for WritableSketch {
+impl Clone for KllSketch {
     fn clone(&self) -> Self {
         let mut compactor_slab = Slab::new();
         let mut compactor_map = [None; LEVEL_LIMIT as usize];
@@ -318,7 +311,7 @@ impl Clone for WritableSketch {
             compactor_map[level as usize] = Some(cid);
         }
 
-        WritableSketch {
+        KllSketch {
             count: self.count,
             level: self.level,
             size: self.size,
@@ -332,7 +325,7 @@ impl Clone for WritableSketch {
     }
 }
 
-impl<W> Encodable<W> for WritableSketch
+impl<W> Encodable<W> for KllSketch
 where
     W: Write,
 {
@@ -350,11 +343,11 @@ where
     }
 }
 
-impl<R> Decodable<WritableSketch, R> for WritableSketch
+impl<R> Decodable<KllSketch, R> for KllSketch
 where
     R: Read,
 {
-    fn decode(reader: &mut R) -> Result<WritableSketch, EncodableError> {
+    fn decode(reader: &mut R) -> Result<KllSketch, EncodableError> {
         let count = usize::decode(reader)?;
         let level = u8::decode(reader)?;
         let minmax = MinMax::decode(reader)?;
@@ -376,7 +369,7 @@ where
             let c = Compactor::decode(reader)?;
             compactors.push(c);
         }
-        let s = WritableSketch::from_parts(count, level, minmax, sampler, compactors);
+        let s = KllSketch::from_parts(count, level, minmax, sampler, compactors);
         Ok(s)
     }
 }
@@ -387,7 +380,7 @@ mod tests {
 
     #[test]
     fn it_sketches_quantiles_no_compression() {
-        let mut s = WritableSketch::new();
+        let mut s = KllSketch::new();
         for i in 0..100 {
             s.insert(i as u64);
         }
@@ -401,8 +394,8 @@ mod tests {
 
     #[test]
     fn it_merges_quantiles_no_compression() {
-        let mut s1 = WritableSketch::new();
-        let mut s2 = WritableSketch::new();
+        let mut s1 = KllSketch::new();
+        let mut s2 = KllSketch::new();
         for i in 0..100 {
             s1.insert(i as u64);
             s2.insert(i as u64);
@@ -418,7 +411,7 @@ mod tests {
 
     #[test]
     fn it_inserts_without_exceeding_capacity() {
-        let mut s = WritableSketch::new();
+        let mut s = KllSketch::new();
         let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
         for i in 0..n {
             s.insert(i as u64);
@@ -428,8 +421,8 @@ mod tests {
 
     #[test]
     fn it_merges_without_exceeding_capacity() {
-        let mut s1 = WritableSketch::new();
-        let mut s2 = WritableSketch::new();
+        let mut s1 = KllSketch::new();
+        let mut s2 = KllSketch::new();
         let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
         for i in 0..n {
             s1.insert(i as u64);
@@ -441,14 +434,14 @@ mod tests {
 
     #[test]
     fn it_encodes_and_decodes() {
-        let mut s = WritableSketch::new();
+        let mut s = KllSketch::new();
         let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
         for i in 0..n {
             s.insert(i as u64);
         }
         let mut buf = Vec::<u8>::new();
         s.encode(&mut buf).expect("Could not encode sketch");
-        let decoded = WritableSketch::decode(&mut &buf[..]).expect("Could not decode sketch");
+        let decoded = KllSketch::decode(&mut &buf[..]).expect("Could not decode sketch");
         assert_eq!(s.level, decoded.level);
         assert_eq!(s.capacity, decoded.capacity);
 

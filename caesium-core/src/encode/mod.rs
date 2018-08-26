@@ -1,3 +1,4 @@
+pub mod delta;
 pub mod float;
 pub mod int;
 pub mod slice;

@@ -23,6 +23,7 @@ use std::time::Duration;
 
 fn main() -> Result<(), Error> {
     init_logger();
+    print_features();
     let args = parse_args()?;
     let db = MetricStore::open(&args.db_path)?;
     let db_ref = Arc::new(db);
@@ -44,6 +45,14 @@ fn init_logger() {
         env::set_var("RUST_LOG", "caesium=debug");
     }
     stackdriver_logger::init();
+}
+
+fn print_features() {
+    if cfg!(feature = "baseline") {
+        info!("Using baseline sketch implementation");
+    } else {
+        info!("Using KLL sketch implementation");
+    }
 }
 
 fn start_downsample_thread(interval: Duration, db_ref: Arc<MetricStore>) -> thread::JoinHandle<()> {

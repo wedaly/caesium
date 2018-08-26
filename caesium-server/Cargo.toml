@@ -17,6 +17,9 @@ slab = "0.4"
 stackdriver_logger = "0.3.0"
 uuid = { version = "0.6", features = ["v4"] }
 
+[features]
+baseline = ["caesium-core/baseline"]
+
 [[bench]]
 name = "query"
 harness = false

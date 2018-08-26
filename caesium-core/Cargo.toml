@@ -9,6 +9,9 @@ clap = "2.32.0"
 rand = "0.5.4"
 slab = "0.4"
 
+[features]
+baseline = []
+
 [[bench]]
 name = "quantile"
 harness = false

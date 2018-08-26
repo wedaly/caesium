@@ -1,4 +1,4 @@
-use encode::vbyte::{vbyte_decode, vbyte_encode};
+use encode::delta::{delta_decode, delta_encode};
 use encode::{Decodable, Encodable, EncodableError};
 use rand;
 use std::io::{Read, Write};
@@ -111,13 +111,7 @@ where
             tmp.sort_unstable();
             &tmp
         };
-        data.len().encode(writer)?;
-        let mut x0 = 0;
-        for x1 in data.iter() {
-            let delta = x1 - x0;
-            vbyte_encode(delta, writer)?;
-            x0 = *x1;
-        }
+        delta_encode(&data, writer)?;
         Ok(())
     }
 }
@@ -127,15 +121,7 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<Compactor, EncodableError> {
-        let n = usize::decode(reader)?;
-        let mut data = Vec::with_capacity(n);
-        let mut x0 = 0;
-        for _ in 0..n {
-            let delta = vbyte_decode(reader)?;
-            let x1 = delta + x0;
-            data.push(x1);
-            x0 = x1;
-        }
+        let data = delta_decode(reader)?;
         let compactor = Compactor {
             data,
             is_sorted: true,

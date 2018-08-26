@@ -1,5 +1,6 @@
 FROM alpine:edge
 
+ARG features=
 ENV PORT 8001
 ENV PUBLISH_ADDR 0.0.0.0:8001
 ENV WINDOW_SIZE 30
@@ -11,7 +12,7 @@ COPY . .
 
 RUN apk update && \
     apk add libgcc rust cargo && \
-    cargo install --root /usr/local --path caesium-daemon && \
+    cargo install --root /usr/local --path caesium-daemon --features "$features" && \
     apk del --purge rust cargo && \
     rm -rf /usr/src/caesium/* && \
     rm -rf /root/.cargo
