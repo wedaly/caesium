@@ -21,6 +21,9 @@ const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
     2, 2, 2, 2, 2,
 ];
 
+// Estimated empirically from above parameters
+const EPSILON: f32 = 0.015;
+
 pub struct KllSketch {
     count: usize,
     level: u8,
@@ -181,7 +184,7 @@ impl KllSketch {
             }
         }
 
-        ReadableSketch::new(self.count, self.minmax, data)
+        ReadableSketch::new(EPSILON, self.count, self.minmax, data)
     }
 
     pub fn count(&self) -> usize {

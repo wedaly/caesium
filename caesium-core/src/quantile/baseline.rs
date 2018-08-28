@@ -33,12 +33,13 @@ impl BaselineSketch {
     }
 
     pub fn to_readable(self) -> ReadableSketch {
+        const EPSILON: f32 = 0.0; // Stores all values, so results are exact (error is zero)
         let weighted_values: Vec<WeightedValue> = self
             .data
             .iter()
             .map(|v| WeightedValue::new(1, *v))
             .collect();
-        ReadableSketch::new(self.data.len(), self.minmax, weighted_values)
+        ReadableSketch::new(EPSILON, self.data.len(), self.minmax, weighted_values)
     }
 
     pub fn count(&self) -> usize {
