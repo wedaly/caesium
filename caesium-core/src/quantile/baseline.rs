@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 
 #[derive(Clone)]
 pub struct BaselineSketch {
+    is_sorted: bool,
     data: Vec<u64>,
     minmax: MinMax,
 }
@@ -13,12 +14,14 @@ pub struct BaselineSketch {
 impl BaselineSketch {
     pub fn new() -> BaselineSketch {
         BaselineSketch {
+            is_sorted: true,
             data: Vec::new(),
             minmax: MinMax::new(),
         }
     }
 
     pub fn insert(&mut self, val: u64) {
+        self.is_sorted = false;
         self.minmax.update(val);
         self.data.push(val);
     }
@@ -53,10 +56,15 @@ where
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         let mut tmp = Vec::new();
-        tmp.extend_from_slice(&self.data);
-        tmp.sort_unstable();
+        let data = if self.is_sorted {
+            &self.data
+        } else {
+            tmp.extend_from_slice(&self.data);
+            tmp.sort_unstable();
+            &tmp
+        };
         self.minmax.encode(writer)?;
-        delta_encode(&tmp, writer)?;
+        delta_encode(&data, writer)?;
         Ok(())
     }
 }
@@ -68,7 +76,11 @@ where
     fn decode(reader: &mut R) -> Result<BaselineSketch, EncodableError> {
         let minmax = MinMax::decode(reader)?;
         let data = delta_decode(reader)?;
-        Ok(BaselineSketch { data, minmax })
+        Ok(BaselineSketch {
+            is_sorted: true,
+            data,
+            minmax,
+        })
     }
 }
 
@@ -82,10 +94,7 @@ mod tests {
         for i in 0..10 {
             s.insert(i as u64);
         }
-        let r = s.to_readable();
-        let q = r.query(0.5).expect("Could not query");
-        assert_eq!(q.count, 10);
-        assert_eq!(q.approx_value, 5);
+        assert_query(s, 10, 5);
     }
 
     #[test]
@@ -97,10 +106,7 @@ mod tests {
             s2.insert((i + 10) as u64);
         }
         let s = s1.merge(s2);
-        let r = s.to_readable();
-        let q = r.query(0.5).expect("Could not query");
-        assert_eq!(q.count, 20);
-        assert_eq!(q.approx_value, 10);
+        assert_query(s, 20, 10);
     }
 
     #[test]
@@ -109,13 +115,31 @@ mod tests {
         for i in 0..10 {
             s.insert(i as u64);
         }
+        let decoded = encode_and_decode(s);
+        assert_query(decoded, 10, 5);
+    }
 
+    #[test]
+    fn it_encodes_and_decodes_unsorted() {
+        let mut s = BaselineSketch::new();
+        for i in 0..10 {
+            let val = 9 - i;
+            s.insert(val as u64);
+        }
+        let decoded = encode_and_decode(s);
+        assert_query(decoded, 10, 5);
+    }
+
+    fn encode_and_decode(s: BaselineSketch) -> BaselineSketch {
         let mut buf = Vec::<u8>::new();
         s.encode(&mut buf).expect("Could not encode sketch");
-        let decoded = BaselineSketch::decode(&mut &buf[..]).expect("Could not decode sketch");
-        let r = decoded.to_readable();
+        BaselineSketch::decode(&mut &buf[..]).expect("Could not decode sketch")
+    }
+
+    fn assert_query(s: BaselineSketch, expected_count: usize, expected_median: u64) {
+        let r = s.to_readable();
         let q = r.query(0.5).expect("Could not query");
-        assert_eq!(q.count, 10);
-        assert_eq!(q.approx_value, 5);
+        assert_eq!(q.count, expected_count);
+        assert_eq!(q.approx_value, expected_median);
     }
 }
