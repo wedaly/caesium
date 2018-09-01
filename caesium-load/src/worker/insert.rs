@@ -1,14 +1,17 @@
 use mio::net::UdpSocket;
+use mio::{Poll, PollOpt, Ready, Token};
 use rand::rngs::SmallRng;
 use rand::{FromEntropy, Rng};
 use rate::RateLimiter;
 use std::io;
 use std::net::SocketAddr;
+use worker::Worker;
 
 const MIN_VAL: u64 = 0;
 const MAX_VAL: u64 = 5000;
 
-pub struct Writer {
+pub struct InsertWorker {
+    registered: bool,
     dst_addr: SocketAddr,
     metric_id: usize,
     num_metrics: usize,
@@ -19,17 +22,18 @@ pub struct Writer {
     rng: SmallRng,
 }
 
-impl Writer {
+impl InsertWorker {
     pub fn new(
         dst_addr: &SocketAddr,
         metric_id: usize,
         num_metrics: usize,
         rate_limit: Option<usize>,
-    ) -> Result<Writer, io::Error> {
+    ) -> Result<InsertWorker, io::Error> {
         let dst_addr = dst_addr.clone();
         let addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
         let rate_limiter = RateLimiter::new(rate_limit);
-        let w = Writer {
+        let w = InsertWorker {
+            registered: false,
             dst_addr,
             metric_id,
             num_metrics,
@@ -40,30 +44,6 @@ impl Writer {
             rng: SmallRng::from_entropy(),
         };
         Ok(w)
-    }
-
-    pub fn socket(&self) -> &UdpSocket {
-        &self.socket
-    }
-
-    pub fn write(&mut self) -> Result<(), io::Error> {
-        if !self.rate_limiter.is_within_limit() && self.buf.is_empty() {
-            return Ok(());
-        }
-
-        if self.buf.is_empty() {
-            self.fill_buffer();
-        }
-
-        self.num_written += self.send_until_blocked()?;
-        if self.num_written == self.buf.len() {
-            self.rate_limiter.increment();
-            self.buf.clear();
-            self.num_written = 0;
-            self.metric_id = (self.metric_id + 1) % self.num_metrics;
-        }
-
-        Ok(())
     }
 
     fn fill_buffer(&mut self) {
@@ -90,5 +70,41 @@ impl Writer {
             }
         }
         Ok(num_written)
+    }
+}
+
+impl Worker for InsertWorker {
+    fn register(&mut self, token: Token, poll: &Poll) -> Result<(), io::Error> {
+        if !self.registered {
+            self.registered = true;
+            poll.register(&self.socket, token, Ready::writable(), PollOpt::edge())
+        } else {
+            poll.reregister(&self.socket, token, Ready::writable(), PollOpt::edge())
+        }
+    }
+
+    fn write(&mut self) -> Result<(), io::Error> {
+        if !self.rate_limiter.is_within_limit() && self.buf.is_empty() {
+            return Ok(());
+        }
+
+        if self.buf.is_empty() {
+            self.fill_buffer();
+        }
+
+        self.num_written += self.send_until_blocked()?;
+        if self.num_written == self.buf.len() {
+            debug!("Sent metric `caesium-load.{}`", self.metric_id);
+            self.rate_limiter.increment();
+            self.buf.clear();
+            self.num_written = 0;
+            self.metric_id = (self.metric_id + 1) % self.num_metrics;
+        }
+
+        Ok(())
+    }
+
+    fn read(&mut self) -> Result<(), io::Error> {
+        panic!("Insert worker did not register for read events!");
     }
 }

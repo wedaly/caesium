@@ -28,6 +28,8 @@ services:
         environment:
             - DAEMON_HOST=daemon
             - DAEMON_PORT=8001
+            - SERVER_HOST=server
+            - SERVER_QUERY_PORT=8000
         build:
             context: .
             dockerfile: ./caesium-load/Dockerfile

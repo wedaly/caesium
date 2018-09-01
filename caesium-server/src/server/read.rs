@@ -86,7 +86,7 @@ mod worker {
             match recv_result {
                 Ok(stream) => {
                     debug!("Processing query in worker thread with id {}", id);
-                    if let Err(err) = handle_query(stream, &mut query_buf, db) {
+                    if let Err(err) = handle_query(id, stream, &mut query_buf, db) {
                         error!("Error handling query: {:?}", err);
                     }
                 }
@@ -98,6 +98,7 @@ mod worker {
     }
 
     fn handle_query(
+        id: usize,
         mut stream: TcpStream,
         mut query_buf: &mut String,
         db: &MetricStore,
@@ -106,16 +107,22 @@ mod worker {
         stream.set_write_timeout(Some(Duration::from_millis(WRITE_TIMEOUT_MS)))?;
         query_buf.clear();
         stream.read_to_string(&mut query_buf)?;
+        debug!(
+            "Executing query `{}` in worker thread with id {}",
+            query_buf, id
+        );
         match execute_query(&query_buf, db) {
-            Ok(results) => write_query_results(results, stream),
-            Err(err) => write_query_error(err, stream),
+            Ok(results) => write_query_results(id, results, stream),
+            Err(err) => write_query_error(id, err, stream),
         }
     }
 
     fn write_query_results(
+        id: usize,
         mut results: Vec<QueryResult>,
         mut stream: TcpStream,
     ) -> Result<(), io::Error> {
+        debug!("Writing query results in worker thread with id {}", id);
         results
             .drain(..)
             .map(|r| match r {
@@ -138,7 +145,15 @@ mod worker {
             .collect()
     }
 
-    fn write_query_error(err: QueryError, mut stream: TcpStream) -> Result<(), io::Error> {
+    fn write_query_error(
+        id: usize,
+        err: QueryError,
+        mut stream: TcpStream,
+    ) -> Result<(), io::Error> {
+        debug!(
+            "Writing query error `{:?}` in worker thread with id {}",
+            err, id
+        );
         let err_str = format!("[ERROR] {:?}\n", err);
         stream.write_all(err_str.as_bytes())
     }
