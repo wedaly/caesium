@@ -1,20 +1,28 @@
 extern crate mio;
 extern crate rand;
+extern crate time;
 
 #[macro_use]
 extern crate log;
 
 pub mod error;
 mod rate;
+mod report;
 mod worker;
 
 use error::Error;
 use mio::{Events, Poll, Token};
+use report::event::Event;
+use report::reporter::Reporter;
+use report::sink::LogSink;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::net::SocketAddr;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 use worker::insert::InsertWorker;
 use worker::query::QueryWorker;
@@ -35,18 +43,46 @@ pub struct ReaderConfig {
 }
 
 pub fn generate_load(
+    report_sample_interval: u64,
     writer_config: WriterConfig,
     reader_config: ReaderConfig,
 ) -> Result<(), Error> {
+    let (tx, rx) = channel();
+    start_reporter_thread(rx, report_sample_interval);
+
     let poll = Poll::new()?;
-    let mut workers = Vec::with_capacity(writer_config.num_workers + reader_config.num_workers);
-    init_writers(&mut workers, writer_config)?;
-    init_readers(&mut workers, reader_config)?;
-    register_workers(&poll, &mut workers)?;
+    let mut workers = init_workers(writer_config, reader_config, tx.clone(), &poll)?;
     run_event_loop(&poll, &mut workers)
 }
 
-fn init_writers(workers: &mut Vec<Box<Worker>>, config: WriterConfig) -> Result<(), io::Error> {
+fn start_reporter_thread(rx: Receiver<Event>, sample_interval: u64) {
+    thread::spawn(move || {
+        let reporter = Reporter::new(rx, sample_interval);
+        let sink = LogSink::new();
+        let sink_mutex = Arc::new(Mutex::new(sink));
+        reporter.run(sink_mutex);
+    });
+}
+
+fn init_workers(
+    writer_config: WriterConfig,
+    reader_config: ReaderConfig,
+    tx: Sender<Event>,
+    poll: &Poll,
+) -> Result<Vec<Box<Worker>>, Error> {
+    let num_workers = writer_config.num_workers + reader_config.num_workers;
+    let mut workers = Vec::with_capacity(num_workers);
+    init_writers(&mut workers, writer_config, tx.clone())?;
+    init_readers(&mut workers, reader_config, tx.clone())?;
+    register_workers(poll, &mut workers)?;
+    Ok(workers)
+}
+
+fn init_writers(
+    workers: &mut Vec<Box<Worker>>,
+    config: WriterConfig,
+    tx: Sender<Event>,
+) -> Result<(), io::Error> {
     assert!(config.num_metrics > 0);
     for i in 0..config.num_workers {
         let metric_id = choose_start_for_worker(i, config.num_workers, config.num_metrics);
@@ -55,13 +91,18 @@ fn init_writers(workers: &mut Vec<Box<Worker>>, config: WriterConfig) -> Result<
             metric_id,
             config.num_metrics,
             config.rate_limit,
+            tx.clone(),
         )?;
         workers.push(Box::new(w));
     }
     Ok(())
 }
 
-fn init_readers(workers: &mut Vec<Box<Worker>>, config: ReaderConfig) -> Result<(), Error> {
+fn init_readers(
+    workers: &mut Vec<Box<Worker>>,
+    config: ReaderConfig,
+    tx: Sender<Event>,
+) -> Result<(), Error> {
     let queries = load_queries(&config.query_file_path)?;
     if queries.len() < 1 {
         return Err(Error::ConfigError(
@@ -70,7 +111,14 @@ fn init_readers(workers: &mut Vec<Box<Worker>>, config: ReaderConfig) -> Result<
     }
     for i in 0..config.num_workers {
         let query_idx = choose_start_for_worker(i, config.num_workers, queries.len());
-        let w = QueryWorker::new(&config.addr, &queries, query_idx, config.rate_limit);
+        let w = QueryWorker::new(
+            i,
+            &config.addr,
+            &queries,
+            query_idx,
+            config.rate_limit,
+            tx.clone(),
+        );
         workers.push(Box::new(w));
     }
     Ok(())

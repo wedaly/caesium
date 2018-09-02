@@ -1,9 +1,11 @@
 use mio::net::TcpStream;
 use mio::{Poll, PollOpt, Ready, Token};
 use rate::RateLimiter;
+use report::event::Event;
 use std::io;
 use std::io::{Read, Write};
 use std::net::{Shutdown, SocketAddr};
+use std::sync::mpsc::Sender;
 use worker::Worker;
 
 enum State {
@@ -13,19 +15,23 @@ enum State {
 }
 
 pub struct QueryWorker {
+    id: usize,
     dst_addr: SocketAddr,
     rate_limiter: RateLimiter,
     queries: Vec<String>,
     query_idx: usize,
     state: Option<State>,
+    tx: Sender<Event>,
 }
 
 impl QueryWorker {
     pub fn new(
+        id: usize,
         dst_addr: &SocketAddr,
         queries_slice: &[String],
         query_idx: usize,
         rate_limit: Option<usize>,
+        tx: Sender<Event>,
     ) -> QueryWorker {
         assert!(queries_slice.len() > 0);
         assert!(query_idx < queries_slice.len());
@@ -34,11 +40,13 @@ impl QueryWorker {
         queries.extend_from_slice(queries_slice);
         let rate_limiter = RateLimiter::new(rate_limit);
         QueryWorker {
+            id,
             dst_addr,
             queries,
             query_idx,
             rate_limiter,
             state: None,
+            tx,
         }
     }
 }
@@ -95,10 +103,9 @@ impl Worker for QueryWorker {
                     Some(State::Writing(s, num_written))
                 } else {
                     s.shutdown(Shutdown::Write)?;
-                    debug!(
-                        "Finished sending query `{}`, waiting for response",
-                        self.queries[self.query_idx]
-                    );
+                    self.tx
+                        .send(Event::query_sent_event(self.id, self.query_idx))
+                        .expect("Could not send query sent event to channel");
                     Some(State::Reading(s))
                 }
             }
@@ -130,11 +137,11 @@ impl Worker for QueryWorker {
                     }
                 }
 
+                self.tx
+                    .send(Event::query_bytes_received_event(self.id, self.query_idx))
+                    .expect("Could not send query bytes received event to channel");
+
                 if is_done {
-                    debug!(
-                        "Finished reading response for query `{}`",
-                        self.queries[self.query_idx]
-                    );
                     self.query_idx = (self.query_idx + 1) % self.queries.len();
                     None
                 } else {

@@ -3,8 +3,10 @@ use mio::{Poll, PollOpt, Ready, Token};
 use rand::rngs::SmallRng;
 use rand::{FromEntropy, Rng};
 use rate::RateLimiter;
+use report::event::Event;
 use std::io;
 use std::net::SocketAddr;
+use std::sync::mpsc::Sender;
 use worker::Worker;
 
 const MIN_VAL: u64 = 0;
@@ -20,6 +22,7 @@ pub struct InsertWorker {
     buf: Vec<u8>,
     num_written: usize,
     rng: SmallRng,
+    tx: Sender<Event>,
 }
 
 impl InsertWorker {
@@ -28,6 +31,7 @@ impl InsertWorker {
         metric_id: usize,
         num_metrics: usize,
         rate_limit: Option<usize>,
+        tx: Sender<Event>,
     ) -> Result<InsertWorker, io::Error> {
         let dst_addr = dst_addr.clone();
         let addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
@@ -42,6 +46,7 @@ impl InsertWorker {
             buf: Vec::new(),
             num_written: 0,
             rng: SmallRng::from_entropy(),
+            tx,
         };
         Ok(w)
     }
@@ -94,8 +99,10 @@ impl Worker for InsertWorker {
 
         self.num_written += self.send_until_blocked()?;
         if self.num_written == self.buf.len() {
-            debug!("Sent metric `caesium-load.{}`", self.metric_id);
             self.rate_limiter.increment();
+            self.tx
+                .send(Event::insert_event())
+                .expect("Could not send insert event");
             self.buf.clear();
             self.num_written = 0;
             self.metric_id = (self.metric_id + 1) % self.num_metrics;

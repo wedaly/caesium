@@ -1,5 +1,6 @@
 From alpine:edge
 
+ENV REPORT_SAMPLE_INTERVAL 60
 ENV DAEMON_HOST 127.0.0.1
 ENV DAEMON_PORT 8001
 ENV SERVER_HOST 127.0.0.1
@@ -27,6 +28,7 @@ RUN apk update && \
 CMD SERVICE_NAME="caesium-load" \
     caesium-load \
     $READ_QUERY_FILE_PATH \
+    --report-sample-interval $REPORT_SAMPLE_INTERVAL \
     --write-addr "$DAEMON_HOST:$DAEMON_PORT" \
     --write-num-workers $WRITE_NUM_WORKERS \
     --write-num-metrics $WRITE_NUM_METRICS \

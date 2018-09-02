@@ -11,7 +11,11 @@ use std::net::ToSocketAddrs;
 fn main() -> Result<(), Error> {
     init_logger();
     let args = parse_args()?;
-    generate_load(args.writer_config, args.reader_config).map_err(From::from)
+    generate_load(
+        args.report_sample_interval,
+        args.writer_config,
+        args.reader_config,
+    ).map_err(From::from)
 }
 
 fn init_logger() {
@@ -22,6 +26,7 @@ fn init_logger() {
 }
 
 struct Args {
+    report_sample_interval: u64,
     writer_config: WriterConfig,
     reader_config: ReaderConfig,
 }
@@ -29,6 +34,12 @@ struct Args {
 fn parse_args() -> Result<Args, Error> {
     let matches = App::new("Caesium writer")
         .about("Write metric data to the Caesium daemon")
+        .arg(
+            Arg::with_name("REPORT_SAMPLE_INTERVAL")
+                .long("report-sample-interval")
+                .takes_value(true)
+                .help("Interval in seconds for reporting insert rate and query durations (default 60)")
+        )
         .arg(
             Arg::with_name("WRITE_ADDR")
                 .long("write-addr")
@@ -79,9 +90,14 @@ fn parse_args() -> Result<Args, Error> {
         )
         .get_matches();
 
+    let report_sample_interval = matches
+        .value_of("REPORT_SAMPLE_INTERVAL")
+        .unwrap_or("60")
+        .parse::<u64>()?;
     let writer_config = parse_write_args(&matches)?;
     let reader_config = parse_read_args(&matches)?;
     Ok(Args {
+        report_sample_interval,
         writer_config,
         reader_config,
     })
