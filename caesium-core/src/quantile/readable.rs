@@ -1,5 +1,8 @@
 use quantile::minmax::MinMax;
 
+// Estimated empirically, depends on sketch size
+const EPSILON: f32 = 0.015;
+
 #[derive(Copy, Clone, Debug)]
 pub struct WeightedValue {
     weight: usize,
@@ -29,7 +32,6 @@ struct StoredValue {
 }
 
 pub struct ReadableSketch {
-    epsilon: f32,
     data: Vec<StoredValue>,
     minmax: MinMax,
     count: usize,
@@ -37,18 +39,15 @@ pub struct ReadableSketch {
 
 impl ReadableSketch {
     pub fn new(
-        epsilon: f32,
         count: usize,
         minmax: MinMax,
         weighted_values: Vec<WeightedValue>,
     ) -> ReadableSketch {
-        debug_assert!(epsilon >= 0.0);
         debug_assert!(count == weighted_values.iter().map(|v| v.weight).sum());
         debug_assert!(minmax.min().is_some() == (count > 0));
         debug_assert!(minmax.max().is_some() == (count > 0));
         let data = ReadableSketch::calculate_stored_values(weighted_values);
         ReadableSketch {
-            epsilon,
             count,
             minmax,
             data,
@@ -65,7 +64,7 @@ impl ReadableSketch {
             let target_rank = (self.count as f64 * phi) as usize;
             let idx = self.binary_search(target_rank);
             let approx_value = self.data[idx].value;
-            let max_rank_error = (self.count as f32 * self.epsilon).ceil() as usize;
+            let max_rank_error = (self.count as f32 * EPSILON).ceil() as usize;
             let lower_bound = self.find_lower_bound(target_rank, idx, approx_value, max_rank_error);
             let upper_bound = self.find_upper_bound(target_rank, idx, approx_value, max_rank_error);
             debug_assert!(lower_bound <= approx_value);
@@ -141,8 +140,8 @@ impl ReadableSketch {
                 return self.minmax.min().expect("Could not retrieve min");
             }
 
-            let sv = &self.data[idx];
-            if sv.highest_rank + max_rank_error <= rank && sv.value <= approx_value {
+            let sv = &self.data[idx - 1];
+            if sv.highest_rank + max_rank_error < rank && sv.value <= approx_value {
                 return sv.value;
             }
 
@@ -162,8 +161,8 @@ impl ReadableSketch {
                 return self.minmax.max().expect("Could not retrieve max");
             }
 
-            let sv = &self.data[idx];
-            if sv.lowest_rank - max_rank_error <= rank && sv.value >= approx_value {
+            let sv = &self.data[idx + 1];
+            if sv.lowest_rank - max_rank_error < rank && sv.value >= approx_value {
                 return sv.value;
             }
 
@@ -178,11 +177,9 @@ mod tests {
     use rand;
     use rand::Rng;
 
-    const EPSILON: f32 = 0.015;
-
     #[test]
     fn it_queries_empty() {
-        let s = ReadableSketch::new(EPSILON, 0, MinMax::new(), vec![]);
+        let s = ReadableSketch::new(0, MinMax::new(), vec![]);
         assert_eq!(s.query(0.5), None);
     }
 
@@ -236,7 +233,7 @@ mod tests {
     fn it_calculates_upper_and_lower_bounds_single_value() {
         let data = vec![WeightedValue::new(1, 1)];
         let minmax = MinMax::from_values(&vec![1]);
-        let s = ReadableSketch::new(EPSILON, 1, minmax, data);
+        let s = ReadableSketch::new(1, minmax, data);
         let q = s.query(0.5);
         let lower = q.map(|q| q.lower_bound);
         let upper = q.map(|q| q.upper_bound);
@@ -258,7 +255,7 @@ mod tests {
             }
         }
 
-        let s = ReadableSketch::new(EPSILON, count, minmax, data);
+        let s = ReadableSketch::new(count, minmax, data);
         assert_eq!(s.size(), 64); // deduplicate stored values
 
         let q = s.query(0.5);
@@ -271,30 +268,11 @@ mod tests {
         assert!(upper < 64);
     }
 
-    #[test]
-    fn it_calculates_upper_and_lower_bounds_exact_epsilon() {
-        let mut data = Vec::new();
-        let mut minmax = MinMax::new();
-        for i in 0..100 {
-            let val = i as u64;
-            let wv = WeightedValue::new(1, val);
-            data.push(wv);
-            minmax.update(val);
-        }
-        let s = ReadableSketch::new(0.0, data.len(), minmax, data);
-        let q = s.query(0.5);
-        let approx = q.map(|q| q.approx_value).unwrap();
-        let lower = q.map(|q| q.lower_bound).unwrap();
-        let upper = q.map(|q| q.upper_bound).unwrap();
-        assert_eq!(approx, lower);
-        assert_eq!(approx, upper);
-    }
-
     fn assert_queries(data: Vec<WeightedValue>) {
         let count = data.iter().map(|v| v.weight).sum();
         let values: Vec<u64> = data.iter().map(|v| v.value).collect();
         let minmax = MinMax::from_values(&values);
-        let s = ReadableSketch::new(EPSILON, count, minmax, data.clone());
+        let s = ReadableSketch::new(count, minmax, data.clone());
         for p in 1..100 {
             let phi = p as f64 / 100.0;
             let expected = calculate_exact(&data, phi);
