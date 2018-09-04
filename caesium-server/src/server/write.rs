@@ -125,11 +125,11 @@ impl WriteServer {
 }
 
 mod connection {
-    use bytes::{Buf, Bytes, BytesMut, IntoBuf};
+    use bytes::{Bytes, BytesMut};
+    use caesium_core::encode::frame::FrameInfo;
     use mio::net::TcpStream;
     use std::io;
     use std::io::Read;
-    use std::mem::size_of;
     use std::sync::mpsc::SendError;
     use std::sync::mpsc::Sender;
 
@@ -143,7 +143,6 @@ mod connection {
     pub struct Connection {
         stream: TcpStream,
         buf: BytesMut,
-        next_frame_len: Option<u64>,
     }
 
     impl Connection {
@@ -151,7 +150,6 @@ mod connection {
             Connection {
                 stream,
                 buf: BytesMut::with_capacity(INITIAL_BUFSIZE),
-                next_frame_len: None,
             }
         }
 
@@ -177,26 +175,28 @@ mod connection {
 
         pub fn output_messages(&mut self, tx: &Sender<Bytes>) -> Result<(), SendError<Bytes>> {
             loop {
-                let frame_len = match self.next_frame_len.take() {
-                    Some(len) => len,
-                    None => {
-                        if self.buf.len() > size_of::<u64>() {
-                            let mut len_buf = self.buf.split_to(size_of::<u64>()).into_buf();
-                            len_buf.get_u64_be()
-                        } else {
-                            return Ok(());
-                        }
+                match self.read_frame() {
+                    Some(msg_bytes) => {
+                        tx.send(msg_bytes)?;
                     }
-                };
-
-                if self.buf.len() < frame_len as usize {
-                    self.next_frame_len = Some(frame_len);
-                    return Ok(());
-                } else {
-                    let frame_buf = self.buf.split_to(frame_len as usize).freeze();
-                    tx.send(frame_buf)?;
+                    None => {
+                        break;
+                    }
                 }
             }
+            Ok(())
+        }
+
+        fn read_frame(&mut self) -> Option<Bytes> {
+            if let Some(frame_info) = FrameInfo::from_bytes(&self.buf) {
+                let frame_len = frame_info.prefix_len + frame_info.msg_len;
+                if self.buf.len() >= frame_len {
+                    self.buf.advance(frame_info.prefix_len);
+                    let msg_buf = self.buf.split_to(frame_info.msg_len).freeze();
+                    return Some(msg_buf);
+                }
+            }
+            return None;
         }
     }
 }

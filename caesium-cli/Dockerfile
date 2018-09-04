@@ -9,6 +9,7 @@ RUN apk update && \
     apk add libgcc rust cargo && \
     cargo install --root /usr/local --path caesium-cli --bin caesium-quantile && \
     cargo install --root /usr/local --path caesium-cli --bin caesium-query && \
+    cargo install --root /usr/local --path caesium-cli --bin caesium-insert && \
     apk del --purge rust cargo && \
     rm -rf /usr/src/caesium/* && \
     rm -rf /root/.cargo

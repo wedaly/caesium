@@ -8,3 +8,6 @@ caesium-core = { path = "../caesium-core" }
 clap = "2.32.0"
 rand = "0.5.4"
 rustyline = "1.0.0"
+
+[features]
+baseline = ["caesium-core/baseline"]

@@ -1,5 +1,6 @@
 pub mod delta;
 pub mod float;
+pub mod frame;
 pub mod int;
 pub mod slice;
 pub mod string;

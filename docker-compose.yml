@@ -39,6 +39,7 @@ services:
         image: caesium-cli
         environment:
             - CAESIUM_SERVER_QUERY_ADDR=server:8000
+            - CAESIUM_SERVER_INSERT_ADDR=server:8001
         build:
             context: .
             dockerfile: ./caesium-cli/Dockerfile
