@@ -48,6 +48,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        debug_assert!(size_of::<usize>() <= size_of::<u64>());
         (*self as u64).encode(writer)
     }
 }
@@ -57,6 +58,7 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<usize, EncodableError> {
+        debug_assert!(size_of::<usize>() <= size_of::<u64>());
         u64::decode(reader).map(|v| v as usize)
     }
 }
