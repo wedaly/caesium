@@ -6,7 +6,7 @@ extern crate uuid;
 #[macro_use]
 extern crate lazy_static;
 
-use caesium_core::encode::Encodable;
+use caesium_core::encode::frame::FrameEncoder;
 use caesium_core::protocol::messages::InsertMessage;
 use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
@@ -47,6 +47,7 @@ fn it_queries_metrics() {
 
 struct InsertClient {
     stream: TcpStream,
+    frame_encoder: FrameEncoder,
 }
 
 impl InsertClient {
@@ -57,7 +58,10 @@ impl InsertClient {
         stream
             .set_write_timeout(Some(timeout))
             .expect("Could not set write timeout");
-        InsertClient { stream }
+        InsertClient {
+            stream,
+            frame_encoder: FrameEncoder::new(),
+        }
     }
 
     fn insert(&mut self, metric: &str, start: TimeStamp, end: TimeStamp) {
@@ -68,15 +72,9 @@ impl InsertClient {
             window,
             sketch,
         };
-        let mut buf = Vec::new();
-        msg.encode(&mut buf)
-            .expect("Could not encode insert message");
-        let len = buf.len().to_be();
-        len.encode(&mut self.stream)
-            .expect("Could not send message len");
-        self.stream
-            .write(&buf)
-            .expect("Could not send message data");
+        self.frame_encoder
+            .encode_framed_msg(&msg, &mut self.stream)
+            .expect("Could not send framed message");
     }
 
     fn build_sketch() -> WritableSketch {
