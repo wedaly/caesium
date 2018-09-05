@@ -18,8 +18,7 @@ impl FrameEncoder {
     {
         self.buf.clear();
         msg.encode(&mut self.buf)?;
-        let len = self.buf.len().to_be();
-        len.encode(dst)?;
+        self.buf.len().encode(dst)?;
         dst.write(&self.buf)?;
         Ok(())
     }
@@ -37,19 +36,14 @@ impl FrameInfo {
         if buf.len() < prefix_len {
             None
         } else {
-            let msg_len = FrameInfo::decode_len(&buf[..prefix_len]);
+            let msg_len = usize::decode(&mut &buf[..prefix_len])
+                .expect("Could not decode message length from frame");
             let f = FrameInfo {
                 prefix_len,
                 msg_len,
             };
             Some(f)
         }
-    }
-
-    fn decode_len(mut len_bytes: &[u8]) -> usize {
-        debug_assert!(len_bytes.len() == size_of::<u64>());
-        let len = u64::decode(&mut len_bytes).unwrap();
-        u64::from_be(len) as usize
     }
 }
 

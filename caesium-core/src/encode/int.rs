@@ -9,9 +9,10 @@ macro_rules! build_encodable_int_type {
             W: Write,
         {
             fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+                let val = self.to_le();
                 let mut bytes = [0u8; size_of::<$type>()];
                 for i in 0..size_of::<$type>() {
-                    bytes[i] = (self >> (i * 8)) as u8;
+                    bytes[i] = (val >> (i * 8)) as u8;
                 }
                 writer.write_all(&bytes)?;
                 Ok(())
@@ -31,7 +32,7 @@ macro_rules! build_encodable_int_type {
                     val |= (bytes[i] as $type) << (i * 8);
                 }
 
-                Ok(val)
+                Ok(<$type>::from_le(val))
             }
         }
     };
@@ -41,7 +42,24 @@ build_encodable_int_type!(u8);
 build_encodable_int_type!(u16);
 build_encodable_int_type!(u32);
 build_encodable_int_type!(u64);
-build_encodable_int_type!(usize);
+
+impl<W> Encodable<W> for usize
+where
+    W: Write,
+{
+    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        (*self as u64).encode(writer)
+    }
+}
+
+impl<R> Decodable<usize, R> for usize
+where
+    R: Read,
+{
+    fn decode(reader: &mut R) -> Result<usize, EncodableError> {
+        u64::decode(reader).map(|v| v as usize)
+    }
+}
 
 #[cfg(test)]
 mod tests {
