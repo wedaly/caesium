@@ -19,6 +19,20 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [
     'build',
+    '-t', 'gcr.io/hairy-coo-0001/caesium-load:$TAG_NAME',
+    '-f', 'caesium-load/Dockerfile',
+    '.']
+  waitFor: ['-']
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t', 'gcr.io/hairy-coo-0001/caesium-cli:$TAG_NAME',
+    '-f', 'caesium-cli/Dockerfile',
+    '.']
+  waitFor: ['-']
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
     '-t', 'gcr.io/hairy-coo-0001/caesium-server-baseline:$TAG_NAME',
     '-f', 'caesium-server/Dockerfile',
     '--build-arg', 'features=baseline',
@@ -36,22 +50,17 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [
     'build',
-    '-t', 'gcr.io/hairy-coo-0001/caesium-load:$TAG_NAME',
-    '-f', 'caesium-load/Dockerfile',
-    '.']
-  waitFor: ['-']
-- name: 'gcr.io/cloud-builders/docker'
-  args: [
-    'build',
-    '-t', 'gcr.io/hairy-coo-0001/caesium-cli:$TAG_NAME',
+    '-t', 'gcr.io/hairy-coo-0001/caesium-cli-baseline:$TAG_NAME',
     '-f', 'caesium-cli/Dockerfile',
+    '--build-arg', 'features=baseline',
     '.']
   waitFor: ['-']
 images: [
     'gcr.io/hairy-coo-0001/caesium-server:$TAG_NAME',
     'gcr.io/hairy-coo-0001/caesium-daemon:$TAG_NAME',
-    'gcr.io/hairy-coo-0001/caesium-server-baseline:$TAG_NAME',
-    'gcr.io/hairy-coo-0001/caesium-daemon-baseline:$TAG_NAME',
     'gcr.io/hairy-coo-0001/caesium-load:$TAG_NAME',
     'gcr.io/hairy-coo-0001/caesium-cli:$TAG_NAME',
+    'gcr.io/hairy-coo-0001/caesium-server-baseline:$TAG_NAME',
+    'gcr.io/hairy-coo-0001/caesium-daemon-baseline:$TAG_NAME',
+    'gcr.io/hairy-coo-0001/caesium-cli-baseline:$TAG_NAME',
 ]
