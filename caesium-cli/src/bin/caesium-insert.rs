@@ -113,9 +113,16 @@ struct Args {
     server_addr: SocketAddr,
 }
 
+#[cfg(not(feature = "baseline"))]
+const FEATURE_STR: &'static str = "Compiled using KLL sketch implementation";
+
+#[cfg(feature = "baseline")]
+const FEATURE_STR: &'static str = "Compiled using baseline sketch implementation";
+
 fn parse_args() -> Result<Args, Error> {
     let matches = App::new("Sketch insert tool")
         .about("Insert sketch data directly to the server (useful for testing)")
+        .after_help(FEATURE_STR)
         .arg(
             Arg::with_name("DATA_PATH")
                 .index(1)
