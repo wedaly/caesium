@@ -27,6 +27,7 @@ impl BaselineSketch {
     }
 
     pub fn merge(mut self, other: BaselineSketch) -> BaselineSketch {
+        self.is_sorted = false;
         self.data.extend_from_slice(&other.data);
         self.minmax.update_from_other(&other.minmax);
         self
@@ -128,6 +129,20 @@ mod tests {
         }
         let decoded = encode_and_decode(s);
         assert_query(decoded, 10, 5);
+    }
+
+    #[test]
+    fn it_encodes_and_decodes_after_merge() {
+        let mut s1 = BaselineSketch::new();
+        let mut s2 = BaselineSketch::new();
+        for i in 0..10 {
+            s1.insert(i as u64);
+            s2.insert((i + 10) as u64);
+        }
+        let d1 = encode_and_decode(s1);
+        let d2 = encode_and_decode(s2);
+        let s = encode_and_decode(d2.merge(d1));
+        assert_query(s, 20, 10);
     }
 
     fn encode_and_decode(s: BaselineSketch) -> BaselineSketch {
