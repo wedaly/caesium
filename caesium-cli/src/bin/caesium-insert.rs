@@ -11,9 +11,9 @@ use clap::{App, Arg};
 use std::env;
 use std::fs::File;
 use std::io;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
