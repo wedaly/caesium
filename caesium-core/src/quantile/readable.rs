@@ -35,6 +35,7 @@ pub struct ReadableSketch {
     data: Vec<StoredValue>,
     minmax: MinMax,
     count: usize,
+    total_weight: usize,
 }
 
 impl ReadableSketch {
@@ -43,12 +44,16 @@ impl ReadableSketch {
         minmax: MinMax,
         weighted_values: Vec<WeightedValue>,
     ) -> ReadableSketch {
-        debug_assert!(count == weighted_values.iter().map(|v| v.weight).sum());
         debug_assert!(minmax.min().is_some() == (count > 0));
         debug_assert!(minmax.max().is_some() == (count > 0));
+
+        // In some cases, total_weight won't equal count due to randomness
+        // in the KLL sketch weighted sampler.
+        let total_weight = weighted_values.iter().map(|v| v.weight).sum();
         let data = ReadableSketch::calculate_stored_values(weighted_values);
         ReadableSketch {
             count,
+            total_weight,
             minmax,
             data,
         }
@@ -61,10 +66,10 @@ impl ReadableSketch {
     pub fn query(&self, phi: f64) -> Option<ApproxQuantile> {
         assert!(0.0 < phi && phi < 1.0);
         if self.count > 0 {
-            let target_rank = (self.count as f64 * phi) as usize;
+            let target_rank = (self.total_weight as f64 * phi) as usize;
             let idx = self.binary_search(target_rank);
             let approx_value = self.data[idx].value;
-            let max_rank_error = (self.count as f32 * EPSILON).ceil() as usize;
+            let max_rank_error = (self.total_weight as f32 * EPSILON).ceil() as usize;
             let lower_bound = self.find_lower_bound(target_rank, idx, approx_value, max_rank_error);
             let upper_bound = self.find_upper_bound(target_rank, idx, approx_value, max_rank_error);
             debug_assert!(lower_bound <= approx_value);
@@ -227,6 +232,25 @@ mod tests {
             }
         }
         assert_queries(data);
+    }
+
+    #[test]
+    fn it_handles_count_not_equal_total_weight() {
+        let data = vec![
+            WeightedValue::new(1, 2),
+            WeightedValue::new(1, 4),
+            WeightedValue::new(1, 6),
+            WeightedValue::new(1, 7),
+            WeightedValue::new(2, 1),
+            WeightedValue::new(2, 3),
+            WeightedValue::new(2, 5),
+        ];
+        let count = 8;
+        let values: Vec<u64> = data.iter().map(|v| v.value).collect();
+        let minmax = MinMax::from_values(&values);
+        let s = ReadableSketch::new(count, minmax, data);
+        let result = s.query(0.5).expect("Could not query sketch");
+        assert_eq!(result.count, count);
     }
 
     #[test]
