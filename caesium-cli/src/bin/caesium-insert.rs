@@ -13,6 +13,7 @@ use rand::RngCore;
 use std::env;
 use std::fs::File;
 use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 
@@ -21,9 +22,13 @@ fn main() -> Result<(), Error> {
     let insert_cmds = load_data_file(&args.data_path)?;
     let mut socket = TcpStream::connect(&args.server_addr)?;
     let mut frame_encoder = FrameEncoder::new();
+    let start_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     for cmd in insert_cmds.iter() {
         println!("Inserting {:?}", cmd);
-        insert_sketches(&cmd, &mut socket, &mut frame_encoder)?;
+        insert_sketches(&cmd, start_time, &mut socket, &mut frame_encoder)?;
     }
     Ok(())
 }
@@ -73,12 +78,13 @@ fn parse_line(line: &str, line_num: usize) -> Option<InsertCommand> {
 
 fn insert_sketches(
     cmd: &InsertCommand,
+    start_time: u64,
     socket: &mut TcpStream,
     frame_encoder: &mut FrameEncoder,
 ) -> Result<(), Error> {
     for i in 0..cmd.num_sketches {
         let sketch = build_sketch();
-        let window = window_for_idx(i);
+        let window = window_for_idx(start_time, i);
         let msg = InsertMessage {
             metric: cmd.metric_name.clone(),
             window,
@@ -91,9 +97,9 @@ fn insert_sketches(
 
 const WINDOW_SIZE: u64 = 10;
 
-fn window_for_idx(idx: usize) -> TimeWindow {
-    let start = (idx as TimeStamp) * WINDOW_SIZE;
-    let end = ((idx as TimeStamp) + 1) * WINDOW_SIZE;
+fn window_for_idx(start_time: u64, idx: usize) -> TimeWindow {
+    let start = start_time + (idx as TimeStamp) * WINDOW_SIZE;
+    let end = start + WINDOW_SIZE;
     TimeWindow::new(start, end)
 }
 
