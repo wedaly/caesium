@@ -70,9 +70,7 @@ impl MetricStore {
             let key = StorageKey::decode(&mut &key_bytes[..])?;
             let val = StorageValue::decode(&mut &val_bytes[..])?;
             match strategy.get_action(val.window()) {
-                DownsampleAction::Ignore => {
-                    debug!("Ignored key during downsampling: {:?}", key);
-                }
+                DownsampleAction::Ignore => {}
                 DownsampleAction::Discard => {
                     debug!("Deleting key during downsampling: {:?}", key);
                     let key_bytes = key.to_bytes()?;
