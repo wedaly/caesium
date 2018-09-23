@@ -1,6 +1,5 @@
 extern crate caesium_core;
 extern crate clap;
-extern crate rand;
 
 use caesium_core::encode::frame::FrameEncoder;
 use caesium_core::encode::EncodableError;
@@ -9,7 +8,6 @@ use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
 use caesium_core::time::window::TimeWindow;
 use clap::{App, Arg};
-use rand::RngCore;
 use std::env;
 use std::fs::File;
 use std::io;
@@ -82,13 +80,13 @@ fn insert_sketches(
     socket: &mut TcpStream,
     frame_encoder: &mut FrameEncoder,
 ) -> Result<(), Error> {
+    let sketch = build_sketch();
     for i in 0..cmd.num_sketches {
-        let sketch = build_sketch();
         let window = window_for_idx(start_time, i);
         let msg = InsertMessage {
             metric: cmd.metric_name.clone(),
             window,
-            sketch,
+            sketch: sketch.clone(),
         };
         frame_encoder.encode_framed_msg(&msg, socket)?;
     }
@@ -105,10 +103,8 @@ fn window_for_idx(start_time: u64, idx: usize) -> TimeWindow {
 
 fn build_sketch() -> WritableSketch {
     let mut sketch = WritableSketch::new();
-    let mut rng = rand::thread_rng();
-    for _ in 0..2048 {
-        let v = rng.next_u64();
-        sketch.insert(v);
+    for i in 0..100000 {
+        sketch.insert(i as u64);
     }
     sketch
 }
