@@ -18,6 +18,7 @@ pub enum EncodableError {
     IOError(IOError),
     FromUtf8Error(FromUtf8Error),
     FormatError(&'static str),
+    LengthTooLong(usize),
 }
 
 impl From<IOError> for EncodableError {
