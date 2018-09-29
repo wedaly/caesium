@@ -86,18 +86,18 @@ fn it_merges_many_sketches_without_increasing_error() {
     check_error_bound(&mut result, &input);
 }
 
-fn sequential_values(n: usize) -> Vec<u64> {
-    let mut result: Vec<u64> = Vec::with_capacity(n);
+fn sequential_values(n: usize) -> Vec<u32> {
+    let mut result: Vec<u32> = Vec::with_capacity(n);
     for v in 0..n {
-        result.push(v as u64);
+        result.push(v as u32);
     }
     result
 }
 
-fn random_distinct_values(n: usize) -> Vec<u64> {
-    let mut result: Vec<u64> = Vec::with_capacity(n);
+fn random_distinct_values(n: usize) -> Vec<u32> {
+    let mut result: Vec<u32> = Vec::with_capacity(n);
     for v in 0..n {
-        result.push(v as u64);
+        result.push(v as u32);
     }
 
     let mut rng = rand::thread_rng();
@@ -105,11 +105,11 @@ fn random_distinct_values(n: usize) -> Vec<u64> {
     result
 }
 
-fn random_duplicate_values(n: usize) -> Vec<u64> {
-    let mut result: Vec<u64> = Vec::with_capacity(n);
+fn random_duplicate_values(n: usize) -> Vec<u32> {
+    let mut result: Vec<u32> = Vec::with_capacity(n);
     for v in 0..n / 2 {
-        result.push(v as u64);
-        result.push(v as u64);
+        result.push(v as u32);
+        result.push(v as u32);
     }
 
     let mut rng = rand::thread_rng();
@@ -117,12 +117,12 @@ fn random_duplicate_values(n: usize) -> Vec<u64> {
     result
 }
 
-fn build_readable_sketch(input: &[u64]) -> ReadableSketch {
+fn build_readable_sketch(input: &[u32]) -> ReadableSketch {
     let s = build_writable_sketch(input);
     s.to_readable()
 }
 
-fn build_writable_sketch(input: &[u64]) -> WritableSketch {
+fn build_writable_sketch(input: &[u32]) -> WritableSketch {
     let mut sketch = WritableSketch::new();
     for v in input.iter() {
         sketch.insert(*v);
@@ -130,7 +130,7 @@ fn build_writable_sketch(input: &[u64]) -> WritableSketch {
     sketch
 }
 
-fn check_error_bound(sketch: &mut ReadableSketch, input: &[u64]) {
+fn check_error_bound(sketch: &mut ReadableSketch, input: &[u32]) {
     let calc = ErrorCalculator::new(&input);
     for i in 1..10 {
         let phi = i as f64 / 10.0;

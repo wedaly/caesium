@@ -3,7 +3,7 @@ use encode::EncodableError;
 use std::io::{Read, Write};
 
 // Data *must* be sorted ascending
-pub fn delta_encode<W>(data: &[u64], writer: &mut W) -> Result<(), EncodableError>
+pub fn delta_encode<W>(data: &[u32], writer: &mut W) -> Result<(), EncodableError>
 where
     W: Write,
 {
@@ -16,7 +16,7 @@ where
     vbyte_encode(&deltas, writer)
 }
 
-pub fn delta_decode<R>(reader: &mut R) -> Result<Vec<u64>, EncodableError>
+pub fn delta_decode<R>(reader: &mut R) -> Result<Vec<u32>, EncodableError>
 where
     R: Read,
 {
@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn it_encodes_and_decodes_empty() {
-        let data = Vec::<u64>::new();
+        let data = Vec::<u32>::new();
         let mut buf = Vec::<u8>::new();
         delta_encode(&data, &mut buf).expect("Could not encode empty data vec");
         let decoded = delta_decode(&mut &buf[..]).expect("Could not decode empty data vec");
@@ -46,9 +46,9 @@ mod tests {
 
     #[test]
     fn it_encodes_and_decodes() {
-        let mut data = Vec::<u64>::new();
+        let mut data = Vec::<u32>::new();
         for i in 0..10 {
-            data.push((i * 2) as u64);
+            data.push((i * 2) as u32);
         }
         let mut buf = Vec::<u8>::new();
         delta_encode(&data, &mut buf).expect("Could not encode data vec");

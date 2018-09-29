@@ -65,7 +65,7 @@ fn parse_metric_str(s: &str) -> Option<ProcessorCommand> {
         .captures(s)
         .and_then(|c| match (c.name("metric"), c.name("value")) {
             (Some(metric_match), Some(value_match)) => {
-                value_match.as_str().parse::<u64>().ok().map(|value| {
+                value_match.as_str().parse::<u32>().ok().map(|value| {
                     let metric_name = metric_match.as_str().to_string();
                     ProcessorCommand::InsertMetric(metric_name, value)
                 })
@@ -174,7 +174,7 @@ mod tests {
         assert_invalid(&"foo|123|ms");
     }
 
-    fn assert_cmd(s: &str, expected_metric: &str, expected_val: u64) {
+    fn assert_cmd(s: &str, expected_metric: &str, expected_val: u32) {
         println!("Checking that '{}' is a valid insert command", s);
         let cmd = parse_metric_str(s).expect("Could not parse cmd");
         match cmd {

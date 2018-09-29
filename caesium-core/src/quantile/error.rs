@@ -3,11 +3,11 @@ use std::collections::HashMap;
 
 pub struct ErrorCalculator {
     count: usize,
-    value_range_map: HashMap<u64, (usize, usize)>,
+    value_range_map: HashMap<u32, (usize, usize)>,
 }
 
 impl ErrorCalculator {
-    pub fn new(data: &[u64]) -> ErrorCalculator {
+    pub fn new(data: &[u32]) -> ErrorCalculator {
         let value_range_map = ErrorCalculator::create_value_range_map(&data);
         ErrorCalculator {
             count: data.len(),
@@ -15,7 +15,7 @@ impl ErrorCalculator {
         }
     }
 
-    pub fn calculate_error(&self, phi: f64, approx: u64) -> f64 {
+    pub fn calculate_error(&self, phi: f64, approx: u32) -> f64 {
         assert!(phi > 0.0 && phi < 1.0);
         let exact_rank = (self.count as f64 * phi) as usize;
         let &(min_rank, max_rank) = self
@@ -36,7 +36,7 @@ impl ErrorCalculator {
         (r1 as i32 - r2 as i32).abs() as f64 / self.count as f64
     }
 
-    fn create_value_range_map(data: &[u64]) -> HashMap<u64, (usize, usize)> {
+    fn create_value_range_map(data: &[u32]) -> HashMap<u32, (usize, usize)> {
         let mut sorted = Vec::with_capacity(data.len());
         sorted.extend_from_slice(data);
         sorted.sort_unstable();
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn it_calculates_zero_error_for_exact_result() {
-        let mut data: Vec<u64> = (0..10).collect();
+        let mut data: Vec<u32> = (0..10).collect();
         shuffle(&mut data);
         let calc = ErrorCalculator::new(&data);
         for i in 1..10 {
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn it_calculates_rank_error_distinct_values() {
-        let mut data: Vec<u64> = (0..10).collect();
+        let mut data: Vec<u32> = (0..10).collect();
         shuffle(&mut data);
         let calc = ErrorCalculator::new(&data);
         assert_eq!(calc.calculate_error(0.5, 0), 0.5);
@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(calc.calculate_error(0.5, 9), 0.4);
     }
 
-    fn shuffle(mut data: &mut [u64]) {
+    fn shuffle(mut data: &mut [u32]) {
         let mut rng = rand::thread_rng();
         rng.shuffle(&mut data);
     }

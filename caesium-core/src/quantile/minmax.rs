@@ -4,19 +4,19 @@ use std::io::{Read, Write};
 
 #[derive(Clone)]
 pub struct MinMax {
-    min: u64,
-    max: u64,
+    min: u32,
+    max: u32,
 }
 
 impl MinMax {
     pub fn new() -> MinMax {
         MinMax {
-            min: u64::max_value(),
-            max: 0u64,
+            min: u32::max_value(),
+            max: 0u32,
         }
     }
 
-    pub fn from_values(values: &[u64]) -> MinMax {
+    pub fn from_values(values: &[u32]) -> MinMax {
         let mut m = MinMax::new();
         for &v in values.iter() {
             m.update(v);
@@ -24,7 +24,7 @@ impl MinMax {
         m
     }
 
-    pub fn update(&mut self, val: u64) {
+    pub fn update(&mut self, val: u32) {
         self.min = min(self.min, val);
         self.max = max(self.max, val);
     }
@@ -34,7 +34,7 @@ impl MinMax {
         self.max = max(self.max, other.max);
     }
 
-    pub fn min(&self) -> Option<u64> {
+    pub fn min(&self) -> Option<u32> {
         if self.has_minmax() {
             Some(self.min)
         } else {
@@ -42,7 +42,7 @@ impl MinMax {
         }
     }
 
-    pub fn max(&self) -> Option<u64> {
+    pub fn max(&self) -> Option<u32> {
         if self.has_minmax() {
             Some(self.max)
         } else {
@@ -71,8 +71,8 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<MinMax, EncodableError> {
-        let min = u64::decode(reader)?;
-        let max = u64::decode(reader)?;
+        let min = u32::decode(reader)?;
+        let max = u32::decode(reader)?;
         let minmax = MinMax { min, max };
         Ok(minmax)
     }
@@ -101,7 +101,7 @@ pub mod tests {
     fn it_returns_min_and_max_different_values() {
         let mut m = MinMax::new();
         for i in 0..100 {
-            m.update(i as u64);
+            m.update(i as u32);
         }
         assert_eq!(m.min(), Some(0));
         assert_eq!(m.max(), Some(99));

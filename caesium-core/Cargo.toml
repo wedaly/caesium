@@ -8,6 +8,7 @@ bencher = "0.1.5"
 clap = "2.32.0"
 rand = "0.5.4"
 slab = "0.4"
+stream-vbyte = "0.3.2"
 
 [features]
 baseline = []

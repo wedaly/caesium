@@ -6,11 +6,11 @@ const EPSILON: f32 = 0.015;
 #[derive(Copy, Clone, Debug)]
 pub struct WeightedValue {
     weight: usize,
-    value: u64,
+    value: u32,
 }
 
 impl WeightedValue {
-    pub fn new(weight: usize, value: u64) -> WeightedValue {
+    pub fn new(weight: usize, value: u32) -> WeightedValue {
         debug_assert!(weight > 0);
         WeightedValue { weight, value }
     }
@@ -19,14 +19,14 @@ impl WeightedValue {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ApproxQuantile {
     pub count: usize,
-    pub approx_value: u64,
-    pub lower_bound: u64,
-    pub upper_bound: u64,
+    pub approx_value: u32,
+    pub lower_bound: u32,
+    pub upper_bound: u32,
 }
 
 #[derive(Debug)]
 struct StoredValue {
-    value: u64,
+    value: u32,
     lowest_rank: usize,
     highest_rank: usize,
 }
@@ -137,9 +137,9 @@ impl ReadableSketch {
         &self,
         rank: usize,
         mut idx: usize,
-        approx_value: u64,
+        approx_value: u32,
         max_rank_error: usize,
-    ) -> u64 {
+    ) -> u32 {
         loop {
             if idx == 0 {
                 return self.minmax.min().expect("Could not retrieve min");
@@ -158,9 +158,9 @@ impl ReadableSketch {
         &self,
         rank: usize,
         mut idx: usize,
-        approx_value: u64,
+        approx_value: u32,
         max_rank_error: usize,
-    ) -> u64 {
+    ) -> u32 {
         loop {
             if idx == self.data.len() - 1 {
                 return self.minmax.max().expect("Could not retrieve max");
@@ -190,14 +190,14 @@ mod tests {
 
     #[test]
     fn it_queries_sorted() {
-        let data: Vec<WeightedValue> = (0..100).map(|v| WeightedValue::new(1, v as u64)).collect();
+        let data: Vec<WeightedValue> = (0..100).map(|v| WeightedValue::new(1, v as u32)).collect();
         assert_queries(data);
     }
 
     #[test]
     fn it_queries_unsorted() {
         let mut data: Vec<WeightedValue> =
-            (0..100).map(|v| WeightedValue::new(1, v as u64)).collect();
+            (0..100).map(|v| WeightedValue::new(1, v as u32)).collect();
         let mut rng = rand::thread_rng();
         rng.shuffle(&mut data);
         assert_queries(data);
@@ -228,7 +228,7 @@ mod tests {
         let mut data = Vec::new();
         for level in 0..4 {
             for value in 0..64 {
-                data.push(WeightedValue::new(1 << level, value as u64));
+                data.push(WeightedValue::new(1 << level, value as u32));
             }
         }
         assert_queries(data);
@@ -246,7 +246,7 @@ mod tests {
             WeightedValue::new(2, 5),
         ];
         let count = 8;
-        let values: Vec<u64> = data.iter().map(|v| v.value).collect();
+        let values: Vec<u32> = data.iter().map(|v| v.value).collect();
         let minmax = MinMax::from_values(&values);
         let s = ReadableSketch::new(count, minmax, data);
         let result = s.query(0.5).expect("Could not query sketch");
@@ -273,8 +273,8 @@ mod tests {
         for level in 0..4 {
             let weight = 1 << level;
             for value in 0..64 {
-                data.push(WeightedValue::new(weight, value as u64));
-                minmax.update(value as u64);
+                data.push(WeightedValue::new(weight, value as u32));
+                minmax.update(value as u32);
                 count += weight;
             }
         }
@@ -294,7 +294,7 @@ mod tests {
 
     fn assert_queries(data: Vec<WeightedValue>) {
         let count = data.iter().map(|v| v.weight).sum();
-        let values: Vec<u64> = data.iter().map(|v| v.value).collect();
+        let values: Vec<u32> = data.iter().map(|v| v.value).collect();
         let minmax = MinMax::from_values(&values);
         let s = ReadableSketch::new(count, minmax, data.clone());
         for p in 1..100 {
@@ -306,7 +306,7 @@ mod tests {
         }
     }
 
-    fn calculate_exact(data: &[WeightedValue], phi: f64) -> Option<u64> {
+    fn calculate_exact(data: &[WeightedValue], phi: f64) -> Option<u32> {
         let mut values = Vec::new();
         for v in data {
             for _ in 0..v.weight {

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 #[derive(Clone)]
 pub struct BaselineSketch {
     is_sorted: bool,
-    data: Vec<u64>,
+    data: Vec<u32>,
     minmax: MinMax,
 }
 
@@ -20,7 +20,7 @@ impl BaselineSketch {
         }
     }
 
-    pub fn insert(&mut self, val: u64) {
+    pub fn insert(&mut self, val: u32) {
         self.is_sorted = false;
         self.minmax.update(val);
         self.data.push(val);
@@ -93,7 +93,7 @@ mod tests {
     fn it_inserts_values() {
         let mut s = BaselineSketch::new();
         for i in 0..10 {
-            s.insert(i as u64);
+            s.insert(i as u32);
         }
         assert_query(s, 10, 5);
     }
@@ -103,8 +103,8 @@ mod tests {
         let mut s1 = BaselineSketch::new();
         let mut s2 = BaselineSketch::new();
         for i in 0..10 {
-            s1.insert(i as u64);
-            s2.insert((i + 10) as u64);
+            s1.insert(i as u32);
+            s2.insert((i + 10) as u32);
         }
         let s = s1.merge(s2);
         assert_query(s, 20, 10);
@@ -114,7 +114,7 @@ mod tests {
     fn it_encodes_and_decodes() {
         let mut s = BaselineSketch::new();
         for i in 0..10 {
-            s.insert(i as u64);
+            s.insert(i as u32);
         }
         let decoded = encode_and_decode(s);
         assert_query(decoded, 10, 5);
@@ -125,7 +125,7 @@ mod tests {
         let mut s = BaselineSketch::new();
         for i in 0..10 {
             let val = 9 - i;
-            s.insert(val as u64);
+            s.insert(val as u32);
         }
         let decoded = encode_and_decode(s);
         assert_query(decoded, 10, 5);
@@ -136,8 +136,8 @@ mod tests {
         let mut s1 = BaselineSketch::new();
         let mut s2 = BaselineSketch::new();
         for i in 0..10 {
-            s1.insert(i as u64);
-            s2.insert((i + 10) as u64);
+            s1.insert(i as u32);
+            s2.insert((i + 10) as u32);
         }
         let d1 = encode_and_decode(s1);
         let d2 = encode_and_decode(s2);
@@ -151,7 +151,7 @@ mod tests {
         BaselineSketch::decode(&mut &buf[..]).expect("Could not decode sketch")
     }
 
-    fn assert_query(s: BaselineSketch, expected_count: usize, expected_median: u64) {
+    fn assert_query(s: BaselineSketch, expected_count: usize, expected_median: u32) {
         let r = s.to_readable();
         let q = r.query(0.5).expect("Could not query");
         assert_eq!(q.count, expected_count);

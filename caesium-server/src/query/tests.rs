@@ -8,13 +8,13 @@ use storage::mock::MockDataSource;
 fn build_data_row(window: TimeWindow) -> DataRow {
     let mut sketch = WritableSketch::new();
     for i in 0..100 {
-        sketch.insert(i as u64);
+        sketch.insert(i as u32);
     }
     DataRow { window, sketch }
 }
 
-fn assert_windows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp, f64, u64)>) {
-    let actual: Vec<(TimeStamp, TimeStamp, f64, u64)> = rows
+fn assert_windows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp, f64, u32)>) {
+    let actual: Vec<(TimeStamp, TimeStamp, f64, u32)> = rows
         .iter()
         .filter_map(|r| match r {
             &QueryResult::QuantileWindow(window, phi, quantile) => {

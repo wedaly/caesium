@@ -65,7 +65,7 @@ fn parse_args() -> Result<Args, Error> {
     })
 }
 
-fn read_data_file(path: &str) -> Result<Vec<u64>, Error> {
+fn read_data_file(path: &str) -> Result<Vec<u32>, Error> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let values = reader
@@ -73,7 +73,7 @@ fn read_data_file(path: &str) -> Result<Vec<u64>, Error> {
         .filter_map(|result| {
             result
                 .map_err(|e| Error::IOError(e))
-                .and_then(|l| l.parse::<u64>().map_err(From::from))
+                .and_then(|l| l.parse::<u32>().map_err(From::from))
                 .ok()
         })
         .collect();
@@ -86,7 +86,7 @@ fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
     candidates.iter().take(num_merges).map(|x| *x).collect()
 }
 
-fn build_sketch(data: &[u64], partitions: &[usize], timer: &mut Timer) -> WritableSketch {
+fn build_sketch(data: &[u32], partitions: &[usize], timer: &mut Timer) -> WritableSketch {
     debug_assert!(partitions.len() <= data.len());
     debug_assert!(partitions.iter().all(|p| *p < data.len()));
     let mut sorted_partitions = Vec::with_capacity(partitions.len());

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 pub struct Sampler {
     weight: usize,
     max_weight: usize, // Output item when stored weight >= max_weight
-    val: u64,
+    val: u32,
     generator: SmallRng,
 }
 
@@ -26,7 +26,7 @@ impl Sampler {
         self.max_weight = max_weight;
     }
 
-    pub fn sample(&mut self, val: u64) -> Option<u64> {
+    pub fn sample(&mut self, val: u32) -> Option<u32> {
         // Special case for small max_weight values to improve performance
         if self.max_weight == 1 {
             Some(val)
@@ -35,7 +35,7 @@ impl Sampler {
         }
     }
 
-    pub fn sample_weighted(&mut self, val: u64, weight: usize) -> Option<u64> {
+    pub fn sample_weighted(&mut self, val: u32, weight: usize) -> Option<u32> {
         assert!(weight <= self.max_weight);
         assert!(weight > 0);
         let combined_weight = self.weight + weight;
@@ -46,7 +46,7 @@ impl Sampler {
         }
     }
 
-    pub fn stored_value(&self) -> u64 {
+    pub fn stored_value(&self) -> u32 {
         self.val
     }
 
@@ -56,10 +56,10 @@ impl Sampler {
 
     fn reservoir_sample_no_overflow(
         &mut self,
-        val: u64,
+        val: u32,
         weight: usize,
         combined_weight: usize,
-    ) -> Option<u64> {
+    ) -> Option<u32> {
         // Replace stored item with probability = weight / combined_weight
         let cutoff = usize::max_value() / combined_weight * weight;
         let r = self.generator.next_u64() as usize;
@@ -75,7 +75,7 @@ impl Sampler {
         }
     }
 
-    fn reservoir_sample_with_overflow(&mut self, val: u64, weight: usize) -> Option<u64> {
+    fn reservoir_sample_with_overflow(&mut self, val: u32, weight: usize) -> Option<u32> {
         let (lighter_val, lighter_weight, heavier_val, heavier_weight) = if self.weight < weight {
             (self.val, self.weight, val, weight)
         } else {
@@ -116,7 +116,7 @@ where
     fn decode(reader: &mut R) -> Result<Sampler, EncodableError> {
         let weight = usize::decode(reader)?;
         let max_weight = usize::decode(reader)?;
-        let val = u64::decode(reader)?;
+        let val = u32::decode(reader)?;
         let sampler = Sampler {
             weight,
             max_weight,
@@ -145,12 +145,12 @@ mod tests {
         for w in 1..10 {
             s.set_max_weight(w);
             for v in 0..(w - 1) {
-                assert_eq!(s.sample(v as u64), None);
+                assert_eq!(s.sample(v as u32), None);
             }
 
-            match s.sample(w as u64) {
+            match s.sample(w as u32) {
                 None => panic!("Expected at least one sample"),
-                Some(v) => assert!(v <= w as u64),
+                Some(v) => assert!(v <= w as u32),
             }
         }
     }
@@ -182,7 +182,7 @@ mod tests {
         let mut s = Sampler::new();
         s.set_max_weight(8);
         for v in 0..100 {
-            s.sample(v as u64);
+            s.sample(v as u32);
         }
 
         let mut buf = Vec::<u8>::new();

@@ -80,7 +80,7 @@ impl InsertClient {
     fn build_sketch() -> WritableSketch {
         let mut sketch = WritableSketch::new();
         for i in 0..10 {
-            sketch.insert(i as u64);
+            sketch.insert(i as u32);
         }
         sketch
     }

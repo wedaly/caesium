@@ -27,7 +27,7 @@ pub fn processor_thread(
 
 #[derive(Debug)]
 pub enum ProcessorCommand {
-    InsertMetric(String, u64),
+    InsertMetric(String, u32),
     CloseWindow(TimeWindow),
 }
 
@@ -66,14 +66,14 @@ impl<'a> Processor<'a> {
         }
     }
 
-    fn insert(&mut self, metric_name: &str, value: u64) {
+    fn insert(&mut self, metric_name: &str, value: u32) {
         let metric_state = MetricState::new(metric_name, value);
         let metric_id = self.metric_states.insert(metric_state);
         self.metric_name_idx
             .insert(metric_name.to_string(), metric_id);
     }
 
-    fn update(&mut self, metric_id: usize, value: u64) {
+    fn update(&mut self, metric_id: usize, value: u32) {
         let metric_state = self
             .metric_states
             .get_mut(metric_id)
@@ -121,7 +121,7 @@ struct MetricState {
 }
 
 impl MetricState {
-    fn new(metric_name: &str, value: u64) -> MetricState {
+    fn new(metric_name: &str, value: u32) -> MetricState {
         let mut sketch = WritableSketch::new();
         sketch.insert(value);
         MetricState {

@@ -6,7 +6,7 @@ use std::slice::Iter;
 
 #[derive(Clone)]
 pub struct Compactor {
-    data: Vec<u64>,
+    data: Vec<u32>,
     is_sorted: bool,
 }
 
@@ -18,12 +18,12 @@ impl Compactor {
         }
     }
 
-    pub fn insert(&mut self, value: u64) {
+    pub fn insert(&mut self, value: u32) {
         self.data.push(value);
         self.is_sorted = false;
     }
 
-    pub fn insert_sorted(&mut self, sorted_values: &[u64]) {
+    pub fn insert_sorted(&mut self, sorted_values: &[u32]) {
         self.ensure_sorted();
         self.data = Compactor::merge_sorted(&self.data, sorted_values);
         debug_assert!(self.is_sorted);
@@ -36,7 +36,7 @@ impl Compactor {
 
     // On input, overflow is empty
     // On output, overflow is sorted (asc by value)
-    pub fn compact(&mut self, overflow: &mut Vec<u64>) {
+    pub fn compact(&mut self, overflow: &mut Vec<u32>) {
         debug_assert!(overflow.is_empty());
         self.ensure_sorted();
 
@@ -62,7 +62,7 @@ impl Compactor {
         }
     }
 
-    pub fn iter_values(&self) -> Iter<u64> {
+    pub fn iter_values(&self) -> Iter<u32> {
         self.data.iter()
     }
 
@@ -77,14 +77,14 @@ impl Compactor {
         }
     }
 
-    fn merge_sorted(v1: &[u64], v2: &[u64]) -> Vec<u64> {
+    fn merge_sorted(v1: &[u32], v2: &[u32]) -> Vec<u32> {
         let (n, m) = (v1.len(), v2.len());
         let mut result = Vec::with_capacity(n + m);
         let (mut i, mut j) = (0, 0);
         while i < n && j < m {
             let lt = v1[i] < v2[j];
-            let v1_mask = !(lt as u64).wrapping_sub(1);
-            let v2_mask = !(!lt as u64).wrapping_sub(1);
+            let v1_mask = !(lt as u32).wrapping_sub(1);
+            let v2_mask = !(!lt as u32).wrapping_sub(1);
             let val = (v1[i] & v1_mask) | (v2[j] & v2_mask);
             result.push(val);
             i += lt as usize;
@@ -247,8 +247,8 @@ mod tests {
         assert_eq!(s1, s2);
     }
 
-    fn assert_values(c: &Compactor, expected: &[u64]) {
-        let actual: Vec<u64> = c.iter_values().map(|v| *v).collect();
+    fn assert_values(c: &Compactor, expected: &[u32]) {
+        let actual: Vec<u32> = c.iter_values().map(|v| *v).collect();
         assert_eq!(c.size(), expected.len());
         assert_eq!(actual, expected);
     }

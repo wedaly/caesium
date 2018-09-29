@@ -86,7 +86,7 @@ impl KllSketch {
         s
     }
 
-    pub fn insert(&mut self, val: u64) {
+    pub fn insert(&mut self, val: u32) {
         self.count += 1;
         self.minmax.update(val);
         if let Some(val) = self.sampler.sample(val) {
@@ -382,7 +382,7 @@ mod tests {
     fn it_sketches_quantiles_no_compression() {
         let mut s = KllSketch::new();
         for i in 0..100 {
-            s.insert(i as u64);
+            s.insert(i as u32);
         }
         let median = s
             .to_readable()
@@ -397,8 +397,8 @@ mod tests {
         let mut s1 = KllSketch::new();
         let mut s2 = KllSketch::new();
         for i in 0..100 {
-            s1.insert(i as u64);
-            s2.insert(i as u64);
+            s1.insert(i as u32);
+            s2.insert(i as u32);
         }
         let merged = s1.merge(s2);
         let median = merged
@@ -414,7 +414,7 @@ mod tests {
         let mut s = KllSketch::new();
         let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
         for i in 0..n {
-            s.insert(i as u64);
+            s.insert(i as u32);
             assert!(s.calculate_size() <= s.calculate_capacity());
         }
     }
@@ -425,8 +425,8 @@ mod tests {
         let mut s2 = KllSketch::new();
         let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
         for i in 0..n {
-            s1.insert(i as u64);
-            s2.insert(i as u64);
+            s1.insert(i as u32);
+            s2.insert(i as u32);
         }
         let merged = s1.merge(s2);
         assert!(merged.calculate_size() <= merged.calculate_capacity());
@@ -437,7 +437,7 @@ mod tests {
         let mut s = KllSketch::new();
         let n = CAPACITY_AT_DEPTH[0] * LEVEL_LIMIT as usize;
         for i in 0..n {
-            s.insert(i as u64);
+            s.insert(i as u32);
         }
         let mut buf = Vec::<u8>::new();
         s.encode(&mut buf).expect("Could not encode sketch");

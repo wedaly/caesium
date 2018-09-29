@@ -10,21 +10,21 @@ use rand::Rng;
 
 fn insert_sequential(sketch: &mut WritableSketch, n: usize) {
     for v in 0..n {
-        sketch.insert(v as u64);
+        sketch.insert(v as u32);
     }
 }
 
 fn insert_random(sketch: &mut WritableSketch, n: usize) {
     for v in random_values(n) {
-        sketch.insert(v as u64);
+        sketch.insert(v as u32);
     }
 }
 
-fn random_values(n: usize) -> Vec<u64> {
+fn random_values(n: usize) -> Vec<u32> {
     let mut rng = rand::thread_rng();
-    let mut result: Vec<u64> = Vec::with_capacity(n);
+    let mut result: Vec<u32> = Vec::with_capacity(n);
     for v in 0..n {
-        result.push(v as u64);
+        result.push(v as u32);
     }
     rng.shuffle(&mut result);
     result

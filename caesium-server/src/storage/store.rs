@@ -645,7 +645,7 @@ mod tests {
         assert!(result.is_ok())
     }
 
-    fn build_sketch_with_values(values: Vec<u64>) -> WritableSketch {
+    fn build_sketch_with_values(values: Vec<u32>) -> WritableSketch {
         let mut s = WritableSketch::new();
         for &i in values.iter() {
             s.insert(i);
@@ -654,11 +654,11 @@ mod tests {
     }
 
     fn build_sketch() -> WritableSketch {
-        let vals: Vec<u64> = (0..100).map(|i| i as u64).collect();
+        let vals: Vec<u32> = (0..100).map(|i| i as u32).collect();
         build_sketch_with_values(vals)
     }
 
-    fn assert_rows(mut rows: Vec<DataRow>, expected: Vec<(TimeStamp, TimeStamp, u64)>) {
+    fn assert_rows(mut rows: Vec<DataRow>, expected: Vec<(TimeStamp, TimeStamp, u32)>) {
         assert_eq!(rows.len(), expected.len());
         for (row, (start, end, median)) in rows.drain(..).zip(expected) {
             assert_eq!(row.window.start(), start);

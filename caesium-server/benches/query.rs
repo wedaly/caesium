@@ -14,7 +14,7 @@ use caesium_server::storage::wildcard::wildcard_match;
 fn insert(db: &mut MockDataSource, metric: &str, start: u64, end: u64, count: usize) {
     let mut sketch = WritableSketch::new();
     for v in 0..count {
-        sketch.insert(v as u64);
+        sketch.insert(v as u32);
     }
     let row = DataRow {
         window: TimeWindow::new(start, end),
