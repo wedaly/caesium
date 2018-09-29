@@ -1,5 +1,5 @@
 use encode::vbyte::{vbyte_decode, vbyte_encode};
-use encode::{Decodable, Encodable, EncodableError};
+use encode::EncodableError;
 use std::io::{Read, Write};
 
 // Data *must* be sorted ascending
@@ -7,25 +7,23 @@ pub fn delta_encode<W>(data: &[u64], writer: &mut W) -> Result<(), EncodableErro
 where
     W: Write,
 {
-    data.len().encode(writer)?;
+    let mut deltas = Vec::with_capacity(data.len());
     let mut x0 = 0;
     for x1 in data.iter() {
-        let delta = x1 - x0;
-        vbyte_encode(delta, writer)?;
+        deltas.push(x1 - x0);
         x0 = *x1;
     }
-    Ok(())
+    vbyte_encode(&deltas, writer)
 }
 
 pub fn delta_decode<R>(reader: &mut R) -> Result<Vec<u64>, EncodableError>
 where
     R: Read,
 {
-    let n = usize::decode(reader)?;
-    let mut data = Vec::with_capacity(n);
+    let deltas = vbyte_decode(reader)?;
+    let mut data = Vec::with_capacity(deltas.len());
     let mut x0 = 0;
-    for _ in 0..n {
-        let delta = vbyte_decode(reader)?;
+    for delta in deltas.iter() {
         let x1 = delta + x0;
         data.push(x1);
         x0 = x1;

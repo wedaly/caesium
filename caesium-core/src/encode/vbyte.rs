@@ -1,46 +1,72 @@
 use encode::{Decodable, Encodable, EncodableError};
 use std::io::{Read, Write};
+use std::mem::size_of;
 
 const BYTE_MASK: u8 = 0x7F;
 const CONTINUE_BIT: u8 = (1 << 7);
 
-pub fn vbyte_encode<W>(mut v: u64, writer: &mut W) -> Result<(), EncodableError>
+pub fn vbyte_encode<W>(values: &[u64], writer: &mut W) -> Result<(), EncodableError>
 where
     W: Write,
 {
-    if v != 0 {
-        while v > 0 {
-            let mut b = v as u8 & BYTE_MASK;
-            v = v >> 7;
-            let continue_flag = ((v > 0) as u8) << 7;
-            b |= continue_flag;
-            b.encode(writer)?;
+    let mut encoded = Vec::with_capacity(values.len() * size_of::<u64>());
+    for &v in values.iter() {
+        if v != 0 {
+            let mut x = v;
+            while x > 0 {
+                let mut b = x as u8 & BYTE_MASK;
+                x = x >> 7;
+                let continue_flag = ((x > 0) as u8) << 7;
+                b |= continue_flag;
+                encoded.push(b);
+            }
+        } else {
+            encoded.push(0u8);
         }
-    } else {
-        0u8.encode(writer)?;
     }
-    Ok(())
+    encoded.encode(writer)
 }
 
-pub fn vbyte_decode<R>(reader: &mut R) -> Result<u64, EncodableError>
+pub fn vbyte_decode<R>(reader: &mut R) -> Result<Vec<u64>, EncodableError>
 where
     R: Read,
 {
-    let mut out = 0u64;
-    let mut continue_bit = true;
+    let encoded = Vec::<u8>::decode(reader)?;
+    let mut decoded = Vec::with_capacity(encoded.len() / size_of::<u64>());
+    let mut v = 0u64;
     let mut i = 0;
-    while continue_bit && i < 10 {
-        let b = u8::decode(reader)?;
-        out |= ((b & BYTE_MASK) as u64) << (i * 7);
-        continue_bit = (b & CONTINUE_BIT) > 0;
+    for b in encoded.iter() {
+        v |= ((b & BYTE_MASK) as u64) << (i * 7);
         i += 1;
+        if (b & CONTINUE_BIT) == 0 {
+            decoded.push(v);
+            v = 0u64;
+            i = 0;
+        }
     }
-    Ok(out)
+    Ok(decoded)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn it_encodes_and_decodes_empty() {
+        let mut buf = Vec::<u8>::new();
+        vbyte_encode(&vec![], &mut buf).unwrap();
+        let output = vbyte_decode(&mut &buf[..]).unwrap();
+        assert_eq!(output.len(), 0);
+    }
+
+    #[test]
+    fn it_encodes_and_decodes_multiple() {
+        let mut buf = Vec::<u8>::new();
+        let input = vec![1, 2, 1 << 23, 3, 4, 1 << 63, 5];
+        vbyte_encode(&input, &mut buf).unwrap();
+        let output = vbyte_decode(&mut &buf[..]).unwrap();
+        assert_eq!(input, output);
+    }
 
     #[test]
     fn it_encodes_and_decodes_vbyte() {
@@ -77,18 +103,12 @@ mod tests {
         assert_vbyte((1 << 63) + 7);
     }
 
-    #[test]
-    fn it_decodes_overflow_vbyte() {
-        let overflow_vbyte = [0xFF; 100];
-        let result = vbyte_decode(&mut &overflow_vbyte[..]).unwrap();
-        assert_eq!(result, u64::max_value());
-    }
-
     fn assert_vbyte(input: u64) {
         let mut buf = Vec::<u8>::new();
-        vbyte_encode(input, &mut buf).unwrap();
+        vbyte_encode(&vec![input], &mut buf).unwrap();
         let output = vbyte_decode(&mut &buf[..]).unwrap();
-        println!("0x{:x} => {:x?} => 0x{:x}", input, &buf, output);
-        assert_eq!(input, output);
+        assert_eq!(output.len(), 1);
+        println!("0x{:x} => {:x?} => 0x{:x}", input, &buf, output[0]);
+        assert_eq!(vec![input], output);
     }
 }
