@@ -224,8 +224,7 @@ impl KllSketch {
             .map(|level| {
                 let c = self.get_compactor(level);
                 c.size()
-            })
-            .sum()
+            }).sum()
     }
 
     fn calculate_capacity(&self) -> usize {

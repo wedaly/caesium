@@ -21,8 +21,7 @@ fn assert_windows(rows: &Vec<QueryResult>, expected: &Vec<(TimeStamp, TimeStamp,
                 Some((window.start(), window.end(), phi, quantile.approx_value))
             }
             _ => None,
-        })
-        .collect();
+        }).collect();
     assert_eq!(actual, *expected);
 }
 
@@ -32,8 +31,7 @@ fn assert_metrics(rows: &Vec<QueryResult>, expected: &Vec<&str>) {
         .filter_map(|r| match r {
             QueryResult::MetricName(m) => Some(m.as_str()),
             _ => None,
-        })
-        .collect();
+        }).collect();
     assert_eq!(actual, *expected);
 }
 
