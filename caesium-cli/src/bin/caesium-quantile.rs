@@ -3,6 +3,7 @@ extern crate clap;
 extern crate rand;
 
 use caesium_core::encode::Encodable;
+use caesium_core::get_sketch_type;
 use caesium_core::quantile::error::ErrorCalculator;
 use caesium_core::quantile::readable::ReadableSketch;
 use caesium_core::quantile::writable::WritableSketch;
@@ -16,16 +17,35 @@ use std::num::ParseIntError;
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
+    println!("Using sketch type {:?}", get_sketch_type());
     let data = read_data_file(&args.data_path)?;
-    let mut timer = Timer::new();
-    let partitions = choose_merge_partitions(data.len(), args.num_merges);
+    let calc = if args.summarize_error {
+        Some(ErrorCalculator::new(&data))
+    } else {
+        None
+    };
 
-    let sketch = build_sketch(&data, &partitions[..], &mut timer);
-    summarize_time(&timer);
-    summarize_size(&sketch);
-    let calc = ErrorCalculator::new(&data);
-    let mut readable = sketch.to_readable();
-    summarize_error(&calc, &mut readable);
+    for i in 0..args.num_trials {
+        println!("Trial {}", i);
+        let mut timer = Timer::new();
+        let partitions = choose_merge_partitions(data.len(), args.num_merges);
+        let sketch = build_sketch(&data, &partitions[..], &mut timer);
+
+        summarize_time(&timer);
+
+        if args.summarize_size {
+            summarize_size(&sketch);
+        }
+
+        if args.summarize_error {
+            let mut readable = sketch.to_readable();
+            if let Some(ref calc) = calc {
+                summarize_error(calc, &mut readable);
+            }
+        }
+
+        println!("================")
+    }
 
     Ok(())
 }
@@ -34,6 +54,9 @@ fn main() -> Result<(), Error> {
 struct Args {
     data_path: String,
     num_merges: usize,
+    num_trials: usize,
+    summarize_size: bool,
+    summarize_error: bool,
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -43,7 +66,7 @@ fn parse_args() -> Result<Args, Error> {
             Arg::with_name("DATA_PATH")
             .index(1)
             .required(true)
-            .help("Path to data file, one unsigned 64-bit integer per line")
+            .help("Path to data file, one unsigned 32-bit integer per line")
         )
         .arg(
             Arg::with_name("NUM_MERGES")
@@ -52,6 +75,25 @@ fn parse_args() -> Result<Args, Error> {
             .takes_value(true)
             .help("If provided, split dataset into NUM_MERGES parts, then merge the parts before querying")
         )
+        .arg(
+            Arg::with_name("NUM_TRIALS")
+            .long("num-trials")
+            .short("t")
+            .takes_value(true)
+            .help("Number of trials to run (default 1)")
+        )
+        .arg(
+            Arg::with_name("SUMMARIZE_SIZE")
+            .long("summarize-size")
+            .short("s")
+            .help("If set, summarize the sketch size")
+        )
+        .arg(
+            Arg::with_name("SUMMARIZE_ERROR")
+            .long("summarize-error")
+            .short("e")
+            .help("If set, summarize the normalized rank error")
+        )
         .get_matches();
 
     let data_path = matches.value_of("DATA_PATH").unwrap().to_string();
@@ -59,9 +101,18 @@ fn parse_args() -> Result<Args, Error> {
         .value_of("NUM_MERGES")
         .unwrap_or("0")
         .parse::<usize>()?;
+    let num_trials = matches
+        .value_of("NUM_TRIALS")
+        .unwrap_or("1")
+        .parse::<usize>()?;
+    let summarize_size = matches.is_present("SUMMARIZE_SIZE");
+    let summarize_error = matches.is_present("SUMMARIZE_ERROR");
     Ok(Args {
         data_path,
         num_merges,
+        num_trials,
+        summarize_size,
+        summarize_error,
     })
 }
 

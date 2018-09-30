@@ -6,6 +6,7 @@ extern crate stackdriver_logger;
 #[macro_use]
 extern crate log;
 
+use caesium_core::get_sketch_type;
 use caesium_core::time::clock::{Clock, SystemClock};
 use caesium_server::server::read::ReadServer;
 use caesium_server::server::write::WriteServer;
@@ -23,7 +24,7 @@ use std::time::Duration;
 
 fn main() -> Result<(), Error> {
     init_logger();
-    print_features();
+    info!("Using sketch type {:?}", get_sketch_type());
     let args = parse_args()?;
     let db = MetricStore::open(&args.db_path)?;
     let db_ref = Arc::new(db);
@@ -45,14 +46,6 @@ fn init_logger() {
         env::set_var("RUST_LOG", "caesium=debug");
     }
     stackdriver_logger::init();
-}
-
-fn print_features() {
-    if cfg!(feature = "baseline") {
-        info!("Using baseline sketch implementation");
-    } else {
-        info!("Using KLL sketch implementation");
-    }
 }
 
 fn start_downsample_thread(interval: Duration, db_ref: Arc<MetricStore>) -> thread::JoinHandle<()> {

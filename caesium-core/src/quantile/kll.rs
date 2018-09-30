@@ -251,33 +251,44 @@ impl KllSketch {
     }
 
     fn compress(&mut self) {
-        let mut overflow = Vec::new();
         while self.size > self.capacity {
-            // Compact first level with size > capacity, and insert surviving values into next level
-            for level in self.compactor_level_range() {
-                let capacity = self.capacity_at_level(level);
-                let c = self.get_mut_compactor(level);
-                if overflow.len() > 0 {
-                    c.insert_sorted(&overflow);
-                    overflow.clear();
-                    break;
-                }
+            self.compact_levels();
+        }
+        self.absorb_lower_levels_into_sampler();
+    }
 
-                if c.size() > capacity {
-                    c.compact(&mut overflow);
-                }
-            }
-
-            // Add a new level for surviving values if necessary
+    fn compact_levels(&mut self) {
+        let mut overflow = Vec::new();
+        // Compact first level with size > capacity, and insert surviving values into next level
+        for level in self.compactor_level_range() {
+            let capacity = self.capacity_at_level(level);
+            let c = self.get_mut_compactor(level);
             if overflow.len() > 0 {
-                self.add_compactor();
-                let level = self.top_level();
-                let c = self.get_mut_compactor(level);
                 c.insert_sorted(&overflow);
+                overflow.clear();
+                break;
             }
 
-            self.size = self.calculate_size();
-            self.capacity = self.calculate_capacity();
+            if c.size() > capacity {
+                c.compact(&mut overflow);
+            }
+        }
+
+        // Add a new level for surviving values if necessary
+        if overflow.len() > 0 {
+            self.add_compactor();
+            let level = self.top_level();
+            let c = self.get_mut_compactor(level);
+            c.insert_sorted(&overflow);
+        }
+
+        self.size = self.calculate_size();
+        self.capacity = self.calculate_capacity();
+    }
+
+    fn absorb_lower_levels_into_sampler(&mut self) {
+        if cfg!(feature = "nosampler") {
+            return;
         }
 
         // Absorb any empty compactors with capacity == 2 into the sampler

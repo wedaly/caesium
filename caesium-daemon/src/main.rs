@@ -6,6 +6,7 @@ extern crate stackdriver_logger;
 #[macro_use]
 extern crate log;
 
+use caesium_core::get_sketch_type;
 use caesium_daemon::run_daemon;
 use clap::{App, Arg};
 use std::env;
@@ -15,7 +16,7 @@ use std::num::ParseIntError;
 
 fn main() -> Result<(), Error> {
     init_logger();
-    print_features();
+    info!("Using sketch type {:?}", get_sketch_type());
     let args = parse_args()?;
     run_daemon(args.listen_addr, args.publish_addr, args.window_size)?;
     Ok(())
@@ -26,14 +27,6 @@ fn init_logger() {
         env::set_var("RUST_LOG", "caesium=debug");
     }
     stackdriver_logger::init();
-}
-
-fn print_features() {
-    if cfg!(feature = "baseline") {
-        info!("Using baseline sketch implementation");
-    } else {
-        info!("Using KLL sketch implementation");
-    }
 }
 
 #[derive(Debug)]

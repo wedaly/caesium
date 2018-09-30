@@ -3,6 +3,7 @@ extern crate clap;
 
 use caesium_core::encode::frame::FrameEncoder;
 use caesium_core::encode::EncodableError;
+use caesium_core::get_sketch_type;
 use caesium_core::protocol::messages::InsertMessage;
 use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
@@ -17,6 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
+    println!("Using sketch type {:?}", get_sketch_type());
     let insert_cmds = load_data_file(&args.data_path)?;
     let mut socket = TcpStream::connect(&args.server_addr)?;
     let mut frame_encoder = FrameEncoder::new();

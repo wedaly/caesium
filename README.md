@@ -52,7 +52,7 @@ Example:
 ```
 docker-compose run cli sh
 $ seq 0 100 > data.txt
-$ caesium-quantile data.txt
+$ caesium-quantile -s -e data.txt
 ```
 
 This will report:
