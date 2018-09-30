@@ -52,6 +52,7 @@ impl Reporter {
         }
 
         if self.is_time_to_flush(event_ts) {
+            println!("Flushing for {:?}", event_ts);
             let mut sink = sink_mutex.lock().expect("Could not acquire lock on sink");
             self.insert_tracker.flush(&mut *sink);
             self.query_tracker.flush(&mut *sink);
@@ -85,7 +86,7 @@ impl Reporter {
             Some(last_flush_ts) => {
                 let elapsed_sec = (event_ts - last_flush_ts).num_seconds();
                 if elapsed_sec > 0 {
-                    elapsed_sec as u64 > self.sample_interval_sec
+                    elapsed_sec as u64 >= self.sample_interval_sec
                 } else {
                     false
                 }
@@ -95,6 +96,7 @@ impl Reporter {
     }
 
     fn set_last_flush_ts(&mut self, ts: Timespec) {
+        println!("Set last flush ts: {:?}", ts);
         self.last_flush_ts = Some(ts);
     }
 }
@@ -182,7 +184,7 @@ mod tests {
             query_id: 0,
         }).unwrap();
         tx.send(Event::InsertEvent {
-            event_ts: Timespec::new(2, 0),
+            event_ts: Timespec::new(3, 0),
         }).unwrap();
         drop(tx);
         thread.join().expect("Could not join thread");
