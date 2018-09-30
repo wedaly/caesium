@@ -1,5 +1,5 @@
-use encode::vbyte::{vbyte_decode, vbyte_encode};
-use encode::EncodableError;
+use bitpacking::{BitPacker, BitPacker4x};
+use encode::{Decodable, Encodable, EncodableError};
 use std::io::{Read, Write};
 
 // Data *must* be sorted ascending
@@ -7,28 +7,46 @@ pub fn delta_encode<W>(data: &[u32], writer: &mut W) -> Result<(), EncodableErro
 where
     W: Write,
 {
-    let mut deltas = Vec::with_capacity(data.len());
-    let mut x0 = 0;
-    for x1 in data.iter() {
-        deltas.push(x1 - x0);
-        x0 = *x1;
+    let n = data.len();
+    let num_blocks = n / BitPacker4x::BLOCK_LEN;
+    let bp = BitPacker4x::new();
+    let mut x0 = 0u32;
+    let mut buf = vec![0u8; 4 * BitPacker4x::BLOCK_LEN];
+    n.encode(writer)?;
+    num_blocks.encode(writer)?;
+    for i in 0..num_blocks {
+        let start = i * BitPacker4x::BLOCK_LEN;
+        let end = start + BitPacker4x::BLOCK_LEN;
+        let num_bits = bp.num_bits_sorted(x0, &data[start..end]);
+        let len = bp.compress_sorted(x0, &data[start..end], &mut buf[..], num_bits);
+        num_bits.encode(writer)?;
+        (&buf[..len]).encode(writer)?;
+        x0 = data[end - 1];
     }
-    vbyte_encode(&deltas, writer)
+    &data[num_blocks * BitPacker4x::BLOCK_LEN..].encode(writer)?;
+    Ok(())
 }
 
 pub fn delta_decode<R>(reader: &mut R) -> Result<Vec<u32>, EncodableError>
 where
     R: Read,
 {
-    let deltas = vbyte_decode(reader)?;
-    let mut data = Vec::with_capacity(deltas.len());
-    let mut x0 = 0;
-    for delta in deltas.iter() {
-        let x1 = delta + x0;
-        data.push(x1);
-        x0 = x1;
+    let n = usize::decode(reader)?;
+    let num_blocks = usize::decode(reader)?;
+    let bp = BitPacker4x::new();
+    let mut x0 = 0u32;
+    let mut buf = vec![0u32; BitPacker4x::BLOCK_LEN];
+    let mut out = Vec::with_capacity(n);
+    for _ in 0..num_blocks {
+        let num_bits = u8::decode(reader)?;
+        let block = Vec::<u8>::decode(reader)?;
+        bp.decompress_sorted(x0, &block, &mut buf, num_bits);
+        out.extend_from_slice(&buf);
+        x0 = out[out.len() - 1];
     }
-    Ok(data)
+    let remainder = Vec::<u32>::decode(reader)?;
+    out.extend_from_slice(&remainder);
+    Ok(out)
 }
 
 #[cfg(test)]

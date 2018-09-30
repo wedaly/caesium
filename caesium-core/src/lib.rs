@@ -1,6 +1,6 @@
+extern crate bitpacking;
 extern crate rand;
 extern crate slab;
-extern crate stream_vbyte;
 
 #[macro_use]
 pub mod encode;
