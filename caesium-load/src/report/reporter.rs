@@ -82,19 +82,20 @@ impl Reporter {
 
     fn is_time_to_flush(&self, event_ts: Timespec) -> bool {
         match self.last_flush_ts {
-            Some(t) => t.lt(&self.flush_interval_start(&event_ts)),
+            Some(last_flush_ts) => {
+                let elapsed_sec = (event_ts - last_flush_ts).num_seconds();
+                if elapsed_sec > 0 {
+                    elapsed_sec as u64 > self.sample_interval_sec
+                } else {
+                    false
+                }
+            }
             None => false,
         }
     }
 
     fn set_last_flush_ts(&mut self, ts: Timespec) {
         self.last_flush_ts = Some(ts);
-    }
-
-    fn flush_interval_start(&self, ts: &Timespec) -> Timespec {
-        let interval_sec = self.sample_interval_sec as i64;
-        let new_sec = (ts.sec / interval_sec) * interval_sec;
-        Timespec::new(new_sec, 0)
     }
 }
 
