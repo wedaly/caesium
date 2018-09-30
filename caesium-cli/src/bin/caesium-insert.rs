@@ -96,8 +96,9 @@ const WINDOW_SIZE: u64 = 10;
 
 fn window_for_idx(start_time: u64, idx: usize) -> TimeWindow {
     let start = start_time + (idx as TimeStamp) * WINDOW_SIZE;
-    let end = start + WINDOW_SIZE;
-    TimeWindow::new(start, end)
+    let aligned_start = (start / WINDOW_SIZE) * WINDOW_SIZE;
+    let end = aligned_start + WINDOW_SIZE;
+    TimeWindow::new(aligned_start, end)
 }
 
 fn build_sketch() -> WritableSketch {
