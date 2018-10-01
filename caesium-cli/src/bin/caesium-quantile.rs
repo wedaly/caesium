@@ -133,50 +133,40 @@ fn read_data_file(path: &str) -> Result<Vec<u32>, Error> {
 fn choose_merge_partitions(data_len: usize, num_merges: usize) -> Vec<usize> {
     let mut candidates: Vec<usize> = (0..data_len).collect();
     rand::thread_rng().shuffle(&mut candidates);
-    candidates.iter().take(num_merges).map(|x| *x).collect()
+    let mut partitions: Vec<usize> = candidates.iter().take(num_merges).map(|x| *x).collect();
+    partitions.push(data_len - 1);
+    partitions.sort_unstable();
+    partitions
 }
 
 fn build_sketch(data: &[u32], partitions: &[usize], timer: &mut Timer) -> WritableSketch {
     debug_assert!(partitions.len() <= data.len());
     debug_assert!(partitions.iter().all(|p| *p < data.len()));
-    let mut sorted_partitions = Vec::with_capacity(partitions.len());
-    sorted_partitions.extend_from_slice(partitions);
-    sorted_partitions.sort_unstable();
 
-    let mut tmp = None;
-    let mut result = None;
-    let mut b = 0;
+    let mut sketches = Vec::with_capacity(partitions.len());
+    let mut last_end = 0;
 
     timer.start();
-    data.iter().enumerate().for_each(|(idx, val)| {
-        let mut writable = match tmp.take() {
-            None => WritableSketch::new(),
-            Some(w) => w,
-        };
 
-        writable.insert(*val);
-
-        let cutoff = match sorted_partitions.get(b) {
-            None => data.len() - 1,
-            Some(&x) => x,
-        };
-
-        if idx >= cutoff {
-            result = match result.take() {
-                None => Some(writable),
-                Some(r) => Some(r.merge(writable)),
-            };
-            b += 1;
-        } else {
-            tmp = Some(writable);
+    // Inserts
+    for &p in partitions.iter() {
+        let mut s = WritableSketch::new();
+        for i in last_end..p {
+            s.insert(data[i]);
         }
-    });
+        sketches.push(s);
+        last_end = p;
+    }
+
+    // Merges
+    let mut merged = WritableSketch::new();
+    for s in sketches {
+        merged = merged.merge(s)
+    }
+
     timer.stop();
 
-    match result {
-        None => WritableSketch::new(),
-        Some(s) => s,
-    }
+    merged
 }
 
 fn summarize_time(timer: &Timer) {
