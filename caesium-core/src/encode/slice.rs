@@ -20,7 +20,6 @@ macro_rules! build_encodable_slice_type {
 }
 
 build_encodable_slice_type!(u8);
-build_encodable_slice_type!(u16);
 build_encodable_slice_type!(u32);
 build_encodable_slice_type!(u64);
 build_encodable_slice_type!(usize);

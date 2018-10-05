@@ -1,4 +1,4 @@
-extern crate bitpacking;
+extern crate byteorder;
 extern crate rand;
 extern crate slab;
 

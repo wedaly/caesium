@@ -44,7 +44,6 @@ macro_rules! build_encodable_vec_type {
     };
 }
 
-build_encodable_vec_type!(u16);
 build_encodable_vec_type!(u32);
 build_encodable_vec_type!(u64);
 build_encodable_vec_type!(usize);

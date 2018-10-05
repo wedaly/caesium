@@ -1,47 +1,63 @@
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use encode::{Decodable, Encodable, EncodableError};
 use std::io::{Read, Write};
 use std::mem::size_of;
 
-macro_rules! build_encodable_int_type {
-    ($type:ty) => {
-        impl<W> Encodable<W> for $type
-        where
-            W: Write,
-        {
-            fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-                let val = self.to_le();
-                let mut bytes = [0u8; size_of::<$type>()];
-                for i in 0..size_of::<$type>() {
-                    bytes[i] = (val >> (i * 8)) as u8;
-                }
-                writer.write_all(&bytes)?;
-                Ok(())
-            }
-        }
-
-        impl<R> Decodable<$type, R> for $type
-        where
-            R: Read,
-        {
-            fn decode(reader: &mut R) -> Result<$type, EncodableError> {
-                let mut bytes = [0u8; size_of::<$type>()];
-                reader.read_exact(&mut bytes)?;
-
-                let mut val: $type = 0;
-                for i in 0..size_of::<$type>() {
-                    val |= (bytes[i] as $type) << (i * 8);
-                }
-
-                Ok(<$type>::from_le(val))
-            }
-        }
-    };
+impl<W> Encodable<W> for u8
+where
+    W: Write,
+{
+    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        writer.write_all(&[*self]).map_err(From::from)
+    }
 }
 
-build_encodable_int_type!(u8);
-build_encodable_int_type!(u16);
-build_encodable_int_type!(u32);
-build_encodable_int_type!(u64);
+impl<R> Decodable<u8, R> for u8
+where
+    R: Read,
+{
+    fn decode(reader: &mut R) -> Result<u8, EncodableError> {
+        let mut buf = [0u8];
+        reader.read_exact(&mut buf)?;
+        Ok(buf[0])
+    }
+}
+
+impl<W> Encodable<W> for u32
+where
+    W: Write,
+{
+    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        writer.write_u32::<LittleEndian>(*self).map_err(From::from)
+    }
+}
+
+impl<R> Decodable<u32, R> for u32
+where
+    R: Read,
+{
+    fn decode(reader: &mut R) -> Result<u32, EncodableError> {
+        reader.read_u32::<LittleEndian>().map_err(From::from)
+    }
+}
+
+impl<W> Encodable<W> for u64
+where
+    W: Write,
+{
+    fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
+        writer.write_u64::<LittleEndian>(*self).map_err(From::from)
+    }
+}
+
+impl<R> Decodable<u64, R> for u64
+where
+    R: Read,
+{
+    fn decode(reader: &mut R) -> Result<u64, EncodableError> {
+        reader.read_u64::<LittleEndian>().map_err(From::from)
+    }
+}
 
 impl<W> Encodable<W> for usize
 where
@@ -49,7 +65,9 @@ where
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         debug_assert!(size_of::<usize>() <= size_of::<u64>());
-        (*self as u64).encode(writer)
+        writer
+            .write_u64::<LittleEndian>(*self as u64)
+            .map_err(From::from)
     }
 }
 
@@ -59,7 +77,10 @@ where
 {
     fn decode(reader: &mut R) -> Result<usize, EncodableError> {
         debug_assert!(size_of::<usize>() <= size_of::<u64>());
-        u64::decode(reader).map(|v| v as usize)
+        reader
+            .read_u64::<LittleEndian>()
+            .map(|v| v as usize)
+            .map_err(From::from)
     }
 }
 

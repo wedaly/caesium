@@ -52,7 +52,6 @@ impl Reporter {
         }
 
         if self.is_time_to_flush(event_ts) {
-            println!("Flushing for {:?}", event_ts);
             let mut sink = sink_mutex.lock().expect("Could not acquire lock on sink");
             self.insert_tracker.flush(&mut *sink);
             self.query_tracker.flush(&mut *sink);
@@ -96,7 +95,6 @@ impl Reporter {
     }
 
     fn set_last_flush_ts(&mut self, ts: Timespec) {
-        println!("Set last flush ts: {:?}", ts);
         self.last_flush_ts = Some(ts);
     }
 }
