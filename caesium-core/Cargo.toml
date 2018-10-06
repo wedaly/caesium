@@ -17,6 +17,3 @@ nosampler = []
 [[bench]]
 name = "quantile"
 harness = false
-
-[profile.release]
-debug = true

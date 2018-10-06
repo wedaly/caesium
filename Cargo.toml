@@ -6,3 +6,6 @@ members = [
     "caesium-load",
     "caesium-server"
 ]
+
+[profile.release]
+debug = true
