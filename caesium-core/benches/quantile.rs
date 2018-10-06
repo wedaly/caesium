@@ -55,6 +55,14 @@ fn bench_insert_one_nonempty(bench: &mut Bencher) {
     })
 }
 
+fn bench_insert_one_large_sketch(bench: &mut Bencher) {
+    let mut s = WritableSketch::new();
+    insert_sequential(&mut s, 1_000_000);
+    bench.iter(|| {
+        s.clone().insert(1);
+    })
+}
+
 fn bench_insert_many_empty(bench: &mut Bencher) {
     let s = WritableSketch::new();
     let input = random_values(2048);
@@ -67,6 +75,16 @@ fn bench_insert_many_empty(bench: &mut Bencher) {
 fn bench_insert_many_nonempty(bench: &mut Bencher) {
     let mut s = WritableSketch::new();
     insert_sequential(&mut s, 4096);
+    let input = random_values(2048);
+    bench.iter(|| {
+        let mut sc = s.clone();
+        input.iter().for_each(|v| sc.insert(*v));
+    })
+}
+
+fn bench_insert_many_large_sketch(bench: &mut Bencher) {
+    let mut s = WritableSketch::new();
+    insert_sequential(&mut s, 1_000_000);
     let input = random_values(2048);
     bench.iter(|| {
         let mut sc = s.clone();
@@ -114,6 +132,16 @@ fn bench_merge_two_sketches_random_data(bench: &mut Bencher) {
     })
 }
 
+fn bench_merge_two_large_sketches(bench: &mut Bencher) {
+    let m1 = build_writable_sketch(1_000_000, false);
+    let m2 = build_writable_sketch(1_000_000, false);
+    bench.iter(|| {
+        let m1_clone = m1.clone();
+        let m2_clone = m2.clone();
+        m1_clone.merge(m2_clone)
+    })
+}
+
 fn bench_encode_to_bytes(bench: &mut Bencher) {
     let s = build_writable_sketch(4096, true);
     let mut writer = Vec::new();
@@ -131,14 +159,17 @@ benchmark_group!(
     benches,
     bench_insert_one_empty,
     bench_insert_one_nonempty,
+    bench_insert_one_large_sketch,
     bench_insert_many_empty,
     bench_insert_many_nonempty,
+    bench_insert_many_large_sketch,
     bench_query_small_sketch,
     bench_query_full_sketch_one_tenth,
     bench_query_full_sketch_median,
     bench_query_full_sketch_nine_tenths,
     bench_merge_two_sketches_sequential_data,
     bench_merge_two_sketches_random_data,
+    bench_merge_two_large_sketches,
     bench_encode_to_bytes,
     bench_decode_from_bytes,
 );
