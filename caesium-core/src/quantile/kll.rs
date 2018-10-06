@@ -1,3 +1,6 @@
+// Based on Karnin, Lang, and Liberty. "Optimal quantile approximation in streams."
+// In Foundations of Computer Science (FOCS), 2016 IEEE 57th Annual Symposium on, pp. 71-78. IEEE, 2016.
+
 use encode::{Decodable, Encodable, EncodableError};
 use quantile::compactor::Compactor;
 use quantile::minmax::MinMax;
