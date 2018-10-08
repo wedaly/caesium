@@ -54,7 +54,7 @@ impl<'a> Processor<'a> {
     }
 
     pub fn process_cmd(&mut self, cmd: ProcessorCommand) {
-        debug!("Processing {:?}", cmd);
+        trace!("Processing {:?}", cmd);
         match cmd {
             ProcessorCommand::InsertMetric(metric_name, value) => {
                 match self.metric_name_idx.get(&metric_name) {

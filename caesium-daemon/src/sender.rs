@@ -48,7 +48,7 @@ fn send_until_success(
 
         let delay = retry_delay(retry_count);
         retry_count += 1;
-        debug!(
+        info!(
             "Retry request to backend in {:?} (attempt {})",
             delay, retry_count
         );

@@ -39,7 +39,7 @@ pub fn listener_thread(
 fn handle_datagram(buf: &[u8], out: &Sender<ProcessorCommand>) {
     match str::from_utf8(buf) {
         Ok(s) => {
-            debug!("Received input: {}", &s);
+            trace!("Received input: {}", &s);
             match parse_metric_str(&s) {
                 Some(cmd) => {
                     out.send(cmd)
