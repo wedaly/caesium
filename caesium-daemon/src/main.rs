@@ -11,13 +11,16 @@ use caesium_daemon::run_daemon;
 use clap::{App, Arg};
 use std::env;
 use std::io;
-use std::net::{AddrParseError, SocketAddr, ToSocketAddrs};
 use std::num::ParseIntError;
 
 fn main() -> Result<(), Error> {
     init_logger();
-    info!("Using sketch type {:?}", get_sketch_type());
     let args = parse_args()?;
+    info!("Using sketch type {:?}", get_sketch_type());
+    info!(
+        "Listening on {}, publishing to {}, window size is {}",
+        args.listen_addr, args.publish_addr, args.window_size
+    );
     run_daemon(args.listen_addr, args.publish_addr, args.window_size)?;
     Ok(())
 }
@@ -31,8 +34,8 @@ fn init_logger() {
 
 #[derive(Debug)]
 struct Args {
-    listen_addr: SocketAddr,
-    publish_addr: SocketAddr,
+    listen_addr: String,
+    publish_addr: String,
     window_size: u64,
 }
 
@@ -54,26 +57,22 @@ fn parse_args() -> Result<Args, Error> {
                 .long("window-size")
                 .short("w")
                 .takes_value(true)
-                .help("Size of aggregation windows in seconds (defaults to 30)"),
+                .help("Size of aggregation windows in seconds (defaults to 10)"),
         ).get_matches();
 
     let listen_addr = matches
         .value_of("LISTEN_ADDR")
         .unwrap_or("127.0.0.1:8001")
-        .to_socket_addrs()?
-        .next()
-        .ok_or(Error::ArgError("Expected socket address"))?;
+        .to_string();
 
     let publish_addr = matches
         .value_of("PUBLISH_ADDR")
         .unwrap_or("127.0.0.1:8001")
-        .to_socket_addrs()?
-        .next()
-        .ok_or(Error::ArgError("Expected socket address"))?;
+        .to_string();
 
     let window_size = matches
         .value_of("WINDOW_SIZE")
-        .unwrap_or("30")
+        .unwrap_or("10")
         .parse::<u64>()?;
 
     if window_size < 1 {
@@ -89,16 +88,9 @@ fn parse_args() -> Result<Args, Error> {
 
 #[derive(Debug)]
 enum Error {
-    AddrParseError(AddrParseError),
     ParseIntError(ParseIntError),
     IOError(io::Error),
     ArgError(&'static str),
-}
-
-impl From<AddrParseError> for Error {
-    fn from(err: AddrParseError) -> Error {
-        Error::AddrParseError(err)
-    }
 }
 
 impl From<ParseIntError> for Error {
