@@ -29,4 +29,9 @@ impl Timer {
             _ => None,
         }
     }
+
+    pub fn reset(&mut self) {
+        self.start = None;
+        self.end = None;
+    }
 }
