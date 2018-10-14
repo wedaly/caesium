@@ -18,7 +18,7 @@ fn main() {
         run_trial(false, t);
     }
 
-    println!("insert, trial, size (bytes)");
+    println!("insert,trial,bytes");
     for t in 0..NUM_TRIALS {
         run_trial(true, t);
     }
@@ -32,7 +32,7 @@ fn run_trial(record: bool, trial: usize) {
         s.insert(v);
         let sz = calculate_size(&s);
         if record {
-            println!("{}, {}, {}", i, trial, sz);
+            println!("{},{},{}", i, trial, sz);
         }
     }
 }

@@ -18,7 +18,7 @@ fn main() {
         run_trial(false, t);
     }
 
-    println!("i, phi, trial, nanoseconds");
+    println!("i,phi,trial,nanoseconds");
     for t in 0..NUM_TRIALS {
         run_trial(true, t);
     }
@@ -43,7 +43,7 @@ fn run_trial(record: bool, trial: usize) {
             if record {
                 let d = t.duration().unwrap();
                 let ns = d.subsec_nanos() as u64 + (d.as_secs() * 1_000_000_000);
-                println!("{}, {}, {}, {}", i, phi, trial, ns);
+                println!("{},{},{},{}", i, phi, trial, ns);
             }
         }
     }
