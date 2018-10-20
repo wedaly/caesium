@@ -12,7 +12,6 @@ slab = "0.4"
 
 [features]
 baseline = []
-nosampler = []
 
 [[bench]]
 name = "quantile"

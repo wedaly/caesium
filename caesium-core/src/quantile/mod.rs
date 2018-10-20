@@ -4,7 +4,6 @@ pub mod error;
 pub mod kll;
 mod minmax;
 pub mod readable;
-mod sampler;
 
 pub mod writable {
     #[cfg(not(feature = "baseline"))]

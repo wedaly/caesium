@@ -5,9 +5,7 @@ use encode::{Decodable, Encodable, EncodableError};
 use quantile::compactor::Compactor;
 use quantile::minmax::MinMax;
 use quantile::readable::{ReadableSketch, WeightedValue};
-use quantile::sampler::Sampler;
 use slab::Slab;
-use std::cmp::min;
 use std::io::{Read, Write};
 use std::ops::RangeInclusive;
 
@@ -26,11 +24,9 @@ const CAPACITY_AT_DEPTH: [usize; LEVEL_LIMIT as usize] = [
 
 pub struct KllSketch {
     count: usize,
-    level: u8,
     size: usize,
     capacity: usize,
     minmax: MinMax,
-    sampler: Sampler,
     compactor_count: usize,
     compactor_slab: Slab<Compactor>,
     compactor_map: [Option<usize>; LEVEL_LIMIT as usize], // Level to compactor slab ID
@@ -44,42 +40,30 @@ impl KllSketch {
         compactor_map[0] = Some(cid);
         KllSketch {
             count: 0,
-            level: 0,
             size: 0,
             capacity: CAPACITY_AT_DEPTH[0],
             minmax: MinMax::new(),
-            sampler: Sampler::new(),
             compactor_count: 1,
             compactor_slab,
             compactor_map,
         }
     }
 
-    fn from_parts(
-        count: usize,
-        level: u8,
-        minmax: MinMax,
-        sampler: Sampler,
-        mut compactors: Vec<Compactor>,
-    ) -> KllSketch {
-        assert!(level as usize + compactors.len() < LEVEL_LIMIT as usize);
+    fn from_parts(count: usize, minmax: MinMax, mut compactors: Vec<Compactor>) -> KllSketch {
         assert!(!compactors.is_empty());
         let compactor_count = compactors.len();
         let mut compactor_slab = Slab::new();
         let mut compactor_map = [None; LEVEL_LIMIT as usize];
         for (idx, c) in compactors.drain(..).enumerate() {
-            let compactor_level = level + idx as u8;
             let cid = compactor_slab.insert(c);
-            compactor_map[compactor_level as usize] = Some(cid);
+            compactor_map[idx] = Some(cid);
         }
 
         let mut s = KllSketch {
             count,
-            level,
             size: 0,
             capacity: 0,
             minmax,
-            sampler,
             compactor_count,
             compactor_slab,
             compactor_map,
@@ -92,66 +76,22 @@ impl KllSketch {
     pub fn insert(&mut self, val: u32) {
         self.count += 1;
         self.minmax.update(val);
-        if let Some(val) = self.sampler.sample(val) {
-            {
-                let level = self.level;
-                let first_compactor = self.get_mut_compactor(level);
-                first_compactor.insert(val);
-            }
-            self.size += 1;
-            self.compress()
+        {
+            let first_compactor = self.get_mut_compactor(0);
+            first_compactor.insert(val);
         }
+        self.size += 1;
+        self.compress()
     }
 
     pub fn merge(self, other: KllSketch) -> KllSketch {
-        let (mut survivor, mut victim) = if self.level > other.level {
+        let (mut survivor, mut victim) = if self.top_level() > other.top_level() {
             (self, other)
         } else {
             (other, self)
         };
 
-        let mut values = Vec::new();
-
-        // Absorb victim sampler stored value into survivor sampler
-        let sampler_val = victim.sampler.stored_value();
-        let sampler_weight = victim.sampler.stored_weight();
-        if sampler_weight > 0 {
-            if let Some(v) = survivor
-                .sampler
-                .sample_weighted(sampler_val, sampler_weight)
-            {
-                values.push(v);
-            }
-        }
-
-        // Absorb victim levels < survivor level into survivor sampler
-        for level in victim.level..min(victim.top_level() + 1, survivor.level) {
-            let weight = 1 << level;
-            for val in victim.get_compactor(level).iter_values() {
-                if let Some(v) = survivor.sampler.sample_weighted(*val, weight) {
-                    values.push(v);
-                }
-            }
-        }
-
-        // Insert sampled values into survivor's first level
-        {
-            let first_level = survivor.level;
-            let first_compactor = survivor.get_mut_compactor(first_level);
-            values.sort_unstable();
-            first_compactor.insert_sorted(&values);
-        }
-
-        // Absorb victim levels > survivor level into survivor compactors
-        let num_to_add = if victim.top_level() > survivor.top_level() {
-            victim.top_level() - survivor.top_level()
-        } else {
-            0
-        };
-        for _ in 0..num_to_add {
-            survivor.add_compactor();
-        }
-        for level in survivor.level..=victim.top_level() {
+        for level in victim.compactor_level_range() {
             let mut victim_compactor = victim.get_mut_compactor(level);
             let mut survivor_compactor = survivor.get_mut_compactor(level);
             survivor_compactor.insert_from_other(&mut victim_compactor);
@@ -169,12 +109,6 @@ impl KllSketch {
 
     pub fn to_readable(self) -> ReadableSketch {
         let mut data = Vec::with_capacity(self.size + 1);
-
-        let sampler_weight = self.sampler.stored_weight();
-        if sampler_weight > 0 {
-            let sampler_value = self.sampler.stored_value();
-            data.push(WeightedValue::new(sampler_weight, sampler_value));
-        }
 
         for level in self.compactor_level_range() {
             let weight = 1 << level;
@@ -214,12 +148,12 @@ impl KllSketch {
     }
 
     fn top_level(&self) -> u8 {
-        debug_assert!(self.level as usize + self.compactor_count < LEVEL_LIMIT as usize);
-        self.level + self.compactor_count as u8 - 1
+        debug_assert!(self.compactor_count > 0 && self.compactor_count < LEVEL_LIMIT as usize);
+        self.compactor_count as u8 - 1
     }
 
     fn compactor_level_range(&self) -> RangeInclusive<u8> {
-        RangeInclusive::new(self.level, self.top_level())
+        RangeInclusive::new(0, self.top_level())
     }
 
     fn calculate_size(&self) -> usize {
@@ -257,7 +191,6 @@ impl KllSketch {
         while self.size > self.capacity {
             self.compact_levels();
         }
-        self.absorb_lower_levels_into_sampler();
     }
 
     fn compact_levels(&mut self) {
@@ -288,30 +221,6 @@ impl KllSketch {
         self.size = self.calculate_size();
         self.capacity = self.calculate_capacity();
     }
-
-    fn absorb_lower_levels_into_sampler(&mut self) {
-        if cfg!(feature = "nosampler") {
-            return;
-        }
-
-        // Absorb any empty compactors with capacity == 2 into the sampler
-        for level in self.compactor_level_range() {
-            let capacity = self.capacity_at_level(level);
-            let size = self.get_compactor(level).size();
-            if capacity == 2 && size == 0 {
-                self.level += 1;
-                self.compactor_count -= 1;
-                let cid = self.compactor_map[level as usize]
-                    .take()
-                    .expect("Could not find compactor ID to remove");
-                self.compactor_slab.remove(cid);
-                self.size = self.calculate_size();
-                self.sampler.set_max_weight(1 << self.level);
-            } else {
-                break;
-            }
-        }
-    }
 }
 
 impl Clone for KllSketch {
@@ -326,11 +235,9 @@ impl Clone for KllSketch {
 
         KllSketch {
             count: self.count,
-            level: self.level,
             size: self.size,
             capacity: self.capacity,
             minmax: self.minmax.clone(),
-            sampler: self.sampler.clone(),
             compactor_count: self.compactor_count,
             compactor_slab,
             compactor_map,
@@ -344,9 +251,7 @@ where
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         self.count.encode(writer)?;
-        self.level.encode(writer)?;
         self.minmax.encode(writer)?;
-        self.sampler.encode(writer)?;
         self.compactor_count.encode(writer)?;
         for level in self.compactor_level_range() {
             let c = self.get_compactor(level);
@@ -362,14 +267,8 @@ where
 {
     fn decode(reader: &mut R) -> Result<KllSketch, EncodableError> {
         let count = usize::decode(reader)?;
-        let level = u8::decode(reader)?;
         let minmax = MinMax::decode(reader)?;
-        let sampler = Sampler::decode(reader)?;
         let num_compactors = usize::decode(reader)?;
-
-        if level as usize + num_compactors >= LEVEL_LIMIT as usize {
-            return Err(EncodableError::FormatError("Level value too large"));
-        }
 
         if num_compactors < 1 {
             return Err(EncodableError::FormatError(
@@ -382,7 +281,7 @@ where
             let c = Compactor::decode(reader)?;
             compactors.push(c);
         }
-        let s = KllSketch::from_parts(count, level, minmax, sampler, compactors);
+        let s = KllSketch::from_parts(count, minmax, compactors);
         Ok(s)
     }
 }
@@ -455,7 +354,6 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         s.encode(&mut buf).expect("Could not encode sketch");
         let decoded = KllSketch::decode(&mut &buf[..]).expect("Could not decode sketch");
-        assert_eq!(s.level, decoded.level);
         assert_eq!(s.capacity, decoded.capacity);
 
         let original_compactors: Vec<usize> = s.compactor_map.iter().filter_map(|v| *v).collect();

@@ -11,4 +11,3 @@ rustyline = "1.0.0"
 
 [features]
 baseline = ["caesium-core/baseline"]
-nosampler = ["caesium-core/nosampler"]
