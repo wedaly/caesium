@@ -38,10 +38,9 @@ fn run_trial(record: bool, trial: usize) {
 
         t.start();
         let _merged = s1.merge(s2);
-        t.stop();
+        let d = t.stop().unwrap();
 
         if record {
-            let d = t.duration().unwrap();
             let ns = d.subsec_nanos() as u64 + (d.as_secs() * 1_000_000_000);
             println!("{},{},{}", i, trial, ns);
         }

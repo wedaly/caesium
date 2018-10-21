@@ -49,6 +49,7 @@ impl ReadServer {
 }
 
 mod worker {
+    use caesium_core::time::timer::Timer;
     use query::error::QueryError;
     use query::execute::{execute_query, QueryResult};
     use std::io;
@@ -77,6 +78,7 @@ mod worker {
         db_ref: Arc<MetricStore>,
     ) {
         let mut query_buf = String::new();
+        let mut timer = Timer::new();
         let db = &*db_ref;
         loop {
             let recv_result = rx_lock
@@ -86,7 +88,7 @@ mod worker {
             match recv_result {
                 Ok(stream) => {
                     debug!("Processing query in worker thread with id {}", id);
-                    if let Err(err) = handle_query(id, stream, &mut query_buf, db) {
+                    if let Err(err) = handle_query(id, stream, &mut query_buf, &mut timer, db) {
                         error!("Error handling query: {:?}", err);
                     }
                 }
@@ -101,6 +103,7 @@ mod worker {
         id: usize,
         mut stream: TcpStream,
         mut query_buf: &mut String,
+        timer: &mut Timer,
         db: &MetricStore,
     ) -> Result<(), io::Error> {
         stream.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))?;
@@ -111,8 +114,16 @@ mod worker {
             "Executing query `{}` in worker thread with id {}",
             query_buf, id
         );
+        timer.start();
         match execute_query(&query_buf, db) {
-            Ok(results) => write_query_results(id, results, stream),
+            Ok(results) => {
+                let duration = timer.stop().unwrap();
+                debug!(
+                    "Query in worker thread with id {} executed in {:?}",
+                    id, duration
+                );
+                write_query_results(id, results, stream)
+            }
             Err(err) => write_query_error(id, err, stream),
         }
     }

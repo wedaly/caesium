@@ -38,10 +38,8 @@ fn run_trial(record: bool, trial: usize) {
             let s1 = s.clone();
             t.start();
             let _q = s1.to_readable().query(phi);
-            t.stop();
-
+            let d = t.stop().unwrap();
             if record {
-                let d = t.duration().unwrap();
                 let ns = d.subsec_nanos() as u64 + (d.as_secs() * 1_000_000_000);
                 println!("{},{},{},{}", i, phi, trial, ns);
             }

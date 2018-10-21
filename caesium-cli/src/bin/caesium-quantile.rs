@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use std::num::ParseIntError;
+use std::time::Duration;
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
@@ -30,8 +31,6 @@ fn main() -> Result<(), Error> {
         let mut timer = Timer::new();
         let partitions = choose_merge_partitions(data.len(), args.num_merges);
         let sketch = build_sketch(&data, &partitions[..], &mut timer);
-
-        summarize_time(&timer);
 
         if args.summarize_size {
             summarize_size(&sketch);
@@ -164,13 +163,13 @@ fn build_sketch(data: &[u32], partitions: &[usize], timer: &mut Timer) -> Writab
         merged = merged.merge(s)
     }
 
-    timer.stop();
+    let duration = timer.stop().unwrap();
+    summarize_time(duration);
 
     merged
 }
 
-fn summarize_time(timer: &Timer) {
-    let d = timer.duration().expect("Could not retrieve timer duration");
+fn summarize_time(d: Duration) {
     let ms = (d.as_secs() * 1_000) + (d.subsec_nanos() / 1_000_000) as u64;
     println!("total insert/merge time (ms) = {}", ms);
 }
