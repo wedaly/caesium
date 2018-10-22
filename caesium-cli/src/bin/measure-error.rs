@@ -9,9 +9,6 @@ use rand::{FromEntropy, Rng};
 const NUM_INSERTS: usize = 1_000_000;
 const NUM_TRIALS: usize = 10;
 
-const MIN_VAL: u64 = 0;
-const MAX_VAL: u64 = 5000;
-
 fn main() {
     println!("insert,trial,error");
     for t in 0..NUM_TRIALS {
@@ -25,7 +22,7 @@ fn run_trial(trial: usize) {
         let mut s = WritableSketch::new();
         let mut data = Vec::with_capacity(n);
         for _ in 0..n {
-            let v = rng.gen_range(MIN_VAL, MAX_VAL) as u32;
+            let v: u32 = rng.gen();
             data.push(v);
             s.insert(v);
         }
