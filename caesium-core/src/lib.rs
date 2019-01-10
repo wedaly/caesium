@@ -11,13 +11,16 @@ pub mod time;
 #[derive(Debug)]
 pub enum SketchType {
     Baseline,
-    Kll,
+    KllNoSampler,
+    KllWithSampler,
 }
 
 pub fn get_sketch_type() -> SketchType {
     if cfg!(feature = "baseline") {
         SketchType::Baseline
+    } else if cfg!(feature = "nosampler") {
+        SketchType::KllNoSampler
     } else {
-        SketchType::Kll
+        SketchType::KllWithSampler
     }
 }
