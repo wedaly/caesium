@@ -14,7 +14,7 @@ use std::ops::RangeInclusive;
 const LEVEL_LIMIT: u8 = 64;
 
 // Capacities calculated using:
-// * failure probability (delta) = 10e-8
+// * failure probability (delta) = 1e-8
 // * maximum normalized rank error (epsilon) = 1.5e-2
 // * top levels (s) = log(log(1/delta)) ~= 5
 // * top capacity (k) = (1 / epsilon) * s ~= 200
