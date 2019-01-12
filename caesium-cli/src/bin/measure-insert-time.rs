@@ -7,8 +7,8 @@ use rand::rngs::SmallRng;
 use rand::{FromEntropy, Rng};
 
 const NUM_INSERTS: usize = 1_000_000;
-const NUM_TRIALS: usize = 100;
-const NUM_WARMUPS: usize = 10;
+const NUM_TRIALS: usize = 10;
+const NUM_WARMUPS: usize = 1;
 
 const MIN_VAL: u64 = 0;
 const MAX_VAL: u64 = 5000;
