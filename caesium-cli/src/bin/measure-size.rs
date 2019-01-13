@@ -19,7 +19,7 @@ fn main() {
         run_trial(false, t);
     }
 
-    println!("insert,trial,bytes");
+    println!("insert,trial,decoded_size_bytes,encoded_size_bytes");
     for t in 0..NUM_TRIALS {
         run_trial(true, t);
     }
