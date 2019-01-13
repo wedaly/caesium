@@ -7,7 +7,7 @@ use rand::rngs::SmallRng;
 use rand::{FromEntropy, Rng};
 
 const NUM_INSERTS: usize = 10_000;
-const NUM_TRIALS: usize = 1000;
+const NUM_TRIALS: usize = 100;
 
 fn main() {
     println!("phi,trial,error");
