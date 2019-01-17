@@ -1,8 +1,7 @@
 // Based on Lemire, Kurz, and Rupp, "Stream VByte: Faster byte-oriented integer compression."
 // Information Processing Letters 130 (2018): 1-6.
 
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
-use encode::EncodableError;
+use encode::{Encodable, Decodable, EncodableError};
 use std::arch::x86_64::{__m128i, _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128};
 use std::cmp::max;
 use std::io::{Read, Write};
@@ -49,10 +48,10 @@ where
     }
 
     for v in &data[num_blocks * BLOCK_SIZE..] {
-        data_bytes.write_u32::<LittleEndian>(*v)?;
+        data_bytes.extend_from_slice(&v.to_le_bytes());
     }
 
-    writer.write_u64::<LittleEndian>(n as u64)?;
+    (n as u64).encode(writer)?;
     writer.write_all(&ctrl_bytes)?;
     writer.write_all(&data_bytes)?;
 
@@ -63,7 +62,7 @@ pub fn delta_decode<R>(reader: &mut R) -> Result<Vec<u32>, EncodableError>
 where
     R: Read,
 {
-    let n = reader.read_u64::<LittleEndian>()? as usize;
+    let n = usize::decode(reader)?;
     if n > MAX_DATA_LEN {
         return Err(EncodableError::LengthTooLong(n));
     }
@@ -96,7 +95,7 @@ where
     }
 
     for i in num_blocks * BLOCK_SIZE..n {
-        result[i] = reader.read_u32::<LittleEndian>()?;
+        result[i] = u32::decode(reader)?;
     }
 
     Ok(result)
@@ -124,31 +123,38 @@ fn encode_block(
     l3: usize,
     out: &mut [u8],
 ) -> usize {
-    let mut buf = [0u8; 4];
     let mut i = 0;
 
-    LittleEndian::write_u32(&mut buf, v0);
-    for j in 0..l0 {
-        out[i] = buf[j];
-        i += 1;
+    {
+        let buf = v0.to_le_bytes();
+        for j in 0..l0 {
+            out[i] = buf[j];
+            i += 1;
+        }
     }
 
-    LittleEndian::write_u32(&mut buf, v1);
-    for j in 0..l1 {
-        out[i] = buf[j];
-        i += 1;
+    {
+        let buf = v1.to_le_bytes();
+        for j in 0..l1 {
+            out[i] = buf[j];
+            i += 1;
+        }
     }
 
-    LittleEndian::write_u32(&mut buf, v2);
-    for j in 0..l2 {
-        out[i] = buf[j];
-        i += 1;
+    {
+        let buf = v2.to_le_bytes();
+        for j in 0..l2 {
+            out[i] = buf[j];
+            i += 1;
+        }
     }
 
-    LittleEndian::write_u32(&mut buf, v3);
-    for j in 0..l3 {
-        out[i] = buf[j];
-        i += 1;
+    {
+        let buf = v3.to_le_bytes();
+        for j in 0..l3 {
+            out[i] = buf[j];
+            i += 1;
+        }
     }
 
     i
