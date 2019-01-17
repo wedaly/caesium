@@ -151,7 +151,8 @@ mod worker {
                     metric.push_str(&"\n");
                     metric
                 }
-            }).map(|line| stream.write_all(line.as_bytes()))
+            })
+            .map(|line| stream.write_all(line.as_bytes()))
             .collect()
     }
 

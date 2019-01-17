@@ -125,7 +125,8 @@ fn read_data_file(path: &str) -> Result<Vec<u32>, Error> {
                 .map_err(|e| Error::IOError(e))
                 .and_then(|l| l.parse::<u32>().map_err(From::from))
                 .ok()
-        }).collect();
+        })
+        .collect();
     Ok(values)
 }
 

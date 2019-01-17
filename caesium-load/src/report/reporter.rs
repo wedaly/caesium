@@ -115,25 +115,32 @@ mod tests {
         let thread = thread::spawn(|| r.run(sink_ref));
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(0, 0),
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(0, 50),
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(1, 0),
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(1, 50),
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(1, 60),
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(1, 70),
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(2, 0),
-        }).unwrap();
+        })
+        .unwrap();
         drop(tx);
         thread.join().expect("Could not join thread");
 
@@ -155,35 +162,42 @@ mod tests {
             event_ts: Timespec::new(0, 0),
             worker_id: 0,
             query_id: 0,
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::QueryBytesReceivedEvent {
             event_ts: Timespec::new(0, 50),
             worker_id: 0,
             query_id: 0,
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::QuerySentEvent {
             event_ts: Timespec::new(0, 70),
             worker_id: 0,
             query_id: 0,
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::QueryBytesReceivedEvent {
             event_ts: Timespec::new(1, 10),
             worker_id: 0,
             query_id: 0,
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::QuerySentEvent {
             event_ts: Timespec::new(1, 20),
             worker_id: 0,
             query_id: 0,
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::QueryBytesReceivedEvent {
             event_ts: Timespec::new(1, 40),
             worker_id: 0,
             query_id: 0,
-        }).unwrap();
+        })
+        .unwrap();
         tx.send(Event::InsertEvent {
             event_ts: Timespec::new(3, 0),
-        }).unwrap();
+        })
+        .unwrap();
         drop(tx);
         thread.join().expect("Could not join thread");
 

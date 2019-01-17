@@ -51,7 +51,8 @@ fn load_data_file(path: &str) -> Result<Vec<InsertCommand>, Error> {
                 println!("Could not read line: {:?}", err);
                 None
             }
-        }).collect();
+        })
+        .collect();
     Ok(commands)
 }
 

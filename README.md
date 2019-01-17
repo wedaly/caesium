@@ -70,7 +70,7 @@ $ caesium-quantile data.txt -n 10
 Building Locally
 ----------------
 
-1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.28
+1. [Install Rust](https://www.rust-lang.org/en-US/install.html), version >= 1.32
 2. Build the project: `cargo build`
 3. Binaries will be written to the "target" directory.
 

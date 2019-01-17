@@ -53,7 +53,8 @@ pub fn exact_prefix(pattern: &str) -> String {
     match pattern.find("*") {
         Some(idx) => pattern.split_at(idx).0,
         None => pattern,
-    }.to_string()
+    }
+    .to_string()
 }
 
 struct Bitmap {

@@ -25,7 +25,8 @@ fn main() -> Result<(), Error> {
             .and_then(|line| {
                 rl.add_history_entry(&line);
                 Ok(line)
-            }).and_then(|line| handle_query(&args.server_addr, line.trim()));
+            })
+            .and_then(|line| handle_query(&args.server_addr, line.trim()));
         match result {
             Ok(output) => print!("{}", output),
             Err(Error::ReadlineError(ReadlineError::Eof))

@@ -47,18 +47,21 @@ fn parse_args() -> Result<Args, Error> {
                 .long("listen-addr")
                 .takes_value(true)
                 .help("IP address and port to receive metric data (defaults to 127.0.0.1:8001)"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("PUBLISH_ADDR")
                 .long("publish-addr")
                 .takes_value(true)
                 .help("IP address and port of backend server (defaults to 127.0.0.1:8000)"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("WINDOW_SIZE")
                 .long("window-size")
                 .short("w")
                 .takes_value(true)
                 .help("Size of aggregation windows in seconds (defaults to 10)"),
-        ).get_matches();
+        )
+        .get_matches();
 
     let listen_addr = matches
         .value_of("LISTEN_ADDR")

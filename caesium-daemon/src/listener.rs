@@ -58,7 +58,8 @@ fn parse_metric_str(s: &str) -> Option<ProcessorCommand> {
     lazy_static! {
         static ref INSERT_CMD_RE: Regex = Regex::new(
             "^(?P<metric>[a-zA-Z][a-zA-Z0-9._-]*):(?P<value>[0-9]+)[|]ms([|]@[0-9]+[.][0-9]+)?$"
-        ).expect("Could not compile regex");
+        )
+        .expect("Could not compile regex");
     }
 
     INSERT_CMD_RE

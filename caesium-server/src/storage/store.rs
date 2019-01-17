@@ -216,7 +216,8 @@ impl DataSource for MetricStore {
                         None
                     }
                 },
-            ).take_while(move |(key, _)| key.metric() == metric && key.window_start() < end_ts)
+            )
+            .take_while(move |(key, _)| key.metric() == metric && key.window_start() < end_ts)
             .filter_map(
                 |(_, val_bytes)| match StorageValue::decode(&mut &val_bytes[..]) {
                     Ok(val) => Some(val.to_data_row()),
@@ -385,13 +386,15 @@ mod tests {
                     &metric,
                     TimeWindow::new(0, 30),
                     build_sketch_with_values(vec![1, 2]),
-                ).expect("Could not insert first sketch");
+                )
+                .expect("Could not insert first sketch");
             store
                 .insert(
                     &metric,
                     TimeWindow::new(0, 30),
                     build_sketch_with_values(vec![3]),
-                ).expect("Could not insert second sketch");
+                )
+                .expect("Could not insert second sketch");
             let rows: Vec<DataRow> = store
                 .fetch(metric, None, None)
                 .expect("Could not fetch range")
@@ -409,13 +412,15 @@ mod tests {
                     &metric,
                     TimeWindow::new(0, 30),
                     build_sketch_with_values(vec![1, 2]),
-                ).expect("Could not insert first sketch");
+                )
+                .expect("Could not insert first sketch");
             store
                 .insert(
                     &metric,
                     TimeWindow::new(0, 90),
                     build_sketch_with_values(vec![3]),
-                ).expect("Could not insert second sketch");
+                )
+                .expect("Could not insert second sketch");
             let rows: Vec<DataRow> = store
                 .fetch(metric, None, None)
                 .expect("Could not fetch range")

@@ -15,7 +15,8 @@ fn main() -> Result<(), Error> {
         args.report_sample_interval,
         args.writer_config,
         args.reader_config,
-    ).map_err(From::from)
+    )
+    .map_err(From::from)
 }
 
 fn init_logger() {

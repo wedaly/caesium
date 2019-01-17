@@ -46,7 +46,8 @@ impl ErrorCalculator {
                 .and_modify(|(old_min, old_max)| {
                     *old_min = cmp::min(*old_min, idx);
                     *old_max = cmp::max(*old_max, idx);
-                }).or_insert((idx, idx));
+                })
+                .or_insert((idx, idx));
         }
         map
     }
