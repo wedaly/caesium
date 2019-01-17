@@ -1,7 +1,7 @@
 // Based on Lemire, Kurz, and Rupp, "Stream VByte: Faster byte-oriented integer compression."
 // Information Processing Letters 130 (2018): 1-6.
 
-use encode::{Encodable, Decodable, EncodableError};
+use encode::{Decodable, Encodable, EncodableError};
 use std::arch::x86_64::{__m128i, _mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128};
 use std::cmp::max;
 use std::io::{Read, Write};

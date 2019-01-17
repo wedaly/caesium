@@ -5,7 +5,6 @@ authors = ["Will Daly"]
 
 [dependencies]
 bencher = "0.1.5"
-byteorder = "1.2.6"
 clap = "2.32.0"
 rand = "0.5.4"
 slab = "0.4"
