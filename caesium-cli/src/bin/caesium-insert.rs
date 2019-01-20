@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::num::ParseIntError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() -> Result<(), Error> {
@@ -22,13 +23,15 @@ fn main() -> Result<(), Error> {
     let insert_cmds = load_data_file(&args.data_path)?;
     let mut socket = TcpStream::connect(&args.server_addr)?;
     let mut frame_encoder = FrameEncoder::new();
-    let start_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
     for cmd in insert_cmds.iter() {
         println!("Inserting {:?}", cmd);
-        insert_sketches(&cmd, start_time, &mut socket, &mut frame_encoder)?;
+        insert_sketches(
+            &cmd,
+            args.window_start,
+            args.window_size,
+            &mut socket,
+            &mut frame_encoder,
+        )?;
     }
     Ok(())
 }
@@ -78,13 +81,14 @@ fn parse_line(line: &str, line_num: usize) -> Option<InsertCommand> {
 
 fn insert_sketches(
     cmd: &InsertCommand,
-    start_time: u64,
+    window_start: u64,
+    window_size: u64,
     socket: &mut TcpStream,
     frame_encoder: &mut FrameEncoder,
 ) -> Result<(), Error> {
     let sketch = build_sketch();
     for i in 0..cmd.num_sketches {
-        let window = window_for_idx(start_time, i);
+        let window = window_for_idx(window_start, window_size, i);
         let msg = InsertMessage {
             metric: cmd.metric_name.clone(),
             window,
@@ -95,13 +99,10 @@ fn insert_sketches(
     Ok(())
 }
 
-const WINDOW_SIZE: u64 = 10;
-
-fn window_for_idx(start_time: u64, idx: usize) -> TimeWindow {
-    let start = start_time + (idx as TimeStamp) * WINDOW_SIZE;
-    let aligned_start = (start / WINDOW_SIZE) * WINDOW_SIZE;
-    let end = aligned_start + WINDOW_SIZE;
-    TimeWindow::new(aligned_start, end)
+fn window_for_idx(window_start: u64, window_size: u64, idx: usize) -> TimeWindow {
+    let start = window_start + (idx as TimeStamp) * window_size;
+    let end = start + window_size;
+    TimeWindow::new(start, end)
 }
 
 fn build_sketch() -> WritableSketch {
@@ -116,6 +117,8 @@ fn build_sketch() -> WritableSketch {
 struct Args {
     data_path: String,
     server_addr: SocketAddr,
+    window_start: u64,
+    window_size: u64,
 }
 
 #[cfg(not(feature = "baseline"))]
@@ -141,6 +144,18 @@ fn parse_args() -> Result<Args, Error> {
                 .takes_value(true)
                 .help("Network address of server (defaults to $CAESIUM_SERVER_INSERT_ADDR, then 127.0.0.1:8001)")
         )
+        .arg(
+            Arg::with_name("WINDOW_START")
+                .long("window-start")
+                .takes_value(true)
+                .help("Start time of first window specified as the number of seconds since the UNIX epoch (defaults to current datetime)")
+        )
+        .arg(
+            Arg::with_name("WINDOW_SIZE")
+                .long("window-size")
+                .takes_value(true)
+                .help("Size of each window in seconds (default 10)")
+        )
         .get_matches();
 
     let data_path = matches
@@ -157,9 +172,26 @@ fn parse_args() -> Result<Args, Error> {
         .next()
         .ok_or(Error::ArgError("Expected socket address"))?;
 
+    let default_start = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .to_string();
+    let window_start = matches
+        .value_of("WINDOW_START")
+        .unwrap_or(&default_start)
+        .parse::<u64>()?;
+
+    let window_size = matches
+        .value_of("WINDOW_SIZE")
+        .unwrap_or("10")
+        .parse::<u64>()?;
+
     Ok(Args {
         data_path,
         server_addr,
+        window_start,
+        window_size,
     })
 }
 
@@ -167,6 +199,7 @@ fn parse_args() -> Result<Args, Error> {
 enum Error {
     IOError(io::Error),
     EncodableError(EncodableError),
+    ParseIntError(ParseIntError),
     ArgError(&'static str),
 }
 
@@ -179,5 +212,11 @@ impl From<io::Error> for Error {
 impl From<EncodableError> for Error {
     fn from(err: EncodableError) -> Error {
         Error::EncodableError(err)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(err: ParseIntError) -> Error {
+        Error::ParseIntError(err)
     }
 }
