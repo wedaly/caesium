@@ -1,5 +1,6 @@
 extern crate caesium_core;
 extern crate clap;
+extern crate rand;
 
 use caesium_core::encode::frame::FrameEncoder;
 use caesium_core::encode::EncodableError;
@@ -9,6 +10,8 @@ use caesium_core::quantile::writable::WritableSketch;
 use caesium_core::time::timestamp::TimeStamp;
 use caesium_core::time::window::TimeWindow;
 use clap::{App, Arg};
+use rand::rngs::SmallRng;
+use rand::{FromEntropy, Rng};
 use std::env;
 use std::fs::File;
 use std::io;
@@ -16,6 +19,9 @@ use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::num::ParseIntError;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const MIN_VAL: u64 = 0;
+const MAX_VAL: u64 = 10000;
 
 fn main() -> Result<(), Error> {
     let args = parse_args()?;
@@ -29,6 +35,7 @@ fn main() -> Result<(), Error> {
             &cmd,
             args.window_start,
             args.window_size,
+            args.sketch_size,
             &mut socket,
             &mut frame_encoder,
         )?;
@@ -83,16 +90,16 @@ fn insert_sketches(
     cmd: &InsertCommand,
     window_start: u64,
     window_size: u64,
+    sketch_size: usize,
     socket: &mut TcpStream,
     frame_encoder: &mut FrameEncoder,
 ) -> Result<(), Error> {
-    let sketch = build_sketch();
     for i in 0..cmd.num_sketches {
         let window = window_for_idx(window_start, window_size, i);
         let msg = InsertMessage {
             metric: cmd.metric_name.clone(),
             window,
-            sketch: sketch.clone(),
+            sketch: build_sketch(sketch_size),
         };
         frame_encoder.encode_framed_msg(&msg, socket)?;
     }
@@ -105,10 +112,12 @@ fn window_for_idx(window_start: u64, window_size: u64, idx: usize) -> TimeWindow
     TimeWindow::new(start, end)
 }
 
-fn build_sketch() -> WritableSketch {
+fn build_sketch(size: usize) -> WritableSketch {
+    let mut rng = SmallRng::from_entropy();
     let mut sketch = WritableSketch::new();
-    for i in 0..100000 {
-        sketch.insert(i as u32);
+    for _ in 0..size {
+        let v = rng.gen_range(MIN_VAL, MAX_VAL) as u32;
+        sketch.insert(v);
     }
     sketch
 }
@@ -119,6 +128,7 @@ struct Args {
     server_addr: SocketAddr,
     window_start: u64,
     window_size: u64,
+    sketch_size: usize,
 }
 
 #[cfg(not(feature = "baseline"))]
@@ -156,6 +166,12 @@ fn parse_args() -> Result<Args, Error> {
                 .takes_value(true)
                 .help("Size of each window in seconds (default 10)")
         )
+        .arg(
+            Arg::with_name("SKETCH_SIZE")
+            .long("sketch-size")
+            .takes_value(true)
+            .help("Number of values to insert into each sketch (default 1000)")
+        )
         .get_matches();
 
     let data_path = matches
@@ -187,11 +203,17 @@ fn parse_args() -> Result<Args, Error> {
         .unwrap_or("10")
         .parse::<u64>()?;
 
+    let sketch_size = matches
+        .value_of("SKETCH_SIZE")
+        .unwrap_or("1000")
+        .parse::<usize>()?;
+
     Ok(Args {
         data_path,
         server_addr,
         window_start,
         window_size,
+        sketch_size,
     })
 }
 
