@@ -1,3 +1,4 @@
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use encode::{Decodable, Encodable, EncodableError};
 use std::io::{Read, Write};
 use std::mem::size_of;
@@ -27,7 +28,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        writer.write_all(&self.to_le_bytes()).map_err(From::from)
+        writer.write_u32::<LittleEndian>(*self).map_err(From::from)
     }
 }
 
@@ -36,9 +37,7 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<u32, EncodableError> {
-        let mut buf = [0u8; 4];
-        reader.read_exact(&mut buf)?;
-        Ok(u32::from_le_bytes(buf))
+        reader.read_u32::<LittleEndian>().map_err(From::from)
     }
 }
 
@@ -47,7 +46,7 @@ where
     W: Write,
 {
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
-        writer.write_all(&self.to_le_bytes()).map_err(From::from)
+        writer.write_u64::<LittleEndian>(*self).map_err(From::from)
     }
 }
 
@@ -56,9 +55,7 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<u64, EncodableError> {
-        let mut buf = [0u8; 8];
-        reader.read_exact(&mut buf)?;
-        Ok(u64::from_le_bytes(buf))
+        reader.read_u64::<LittleEndian>().map_err(From::from)
     }
 }
 
@@ -69,7 +66,7 @@ where
     fn encode(&self, writer: &mut W) -> Result<(), EncodableError> {
         debug_assert!(size_of::<usize>() <= size_of::<u64>());
         writer
-            .write_all(&((*self as u64).to_le_bytes()))
+            .write_u64::<LittleEndian>(*self as u64)
             .map_err(From::from)
     }
 }
@@ -80,9 +77,10 @@ where
 {
     fn decode(reader: &mut R) -> Result<usize, EncodableError> {
         debug_assert!(size_of::<usize>() <= size_of::<u64>());
-        let mut buf = [0u8; 8];
-        reader.read_exact(&mut buf)?;
-        Ok((u64::from_le_bytes(buf)) as usize)
+        reader
+            .read_u64::<LittleEndian>()
+            .map(|v| v as usize)
+            .map_err(From::from)
     }
 }
 
