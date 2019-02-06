@@ -12,7 +12,7 @@ use worker::Worker;
 const MIN_VAL: u64 = 0;
 const MAX_VAL: u64 = 5000;
 
-pub struct InsertWorker {
+pub struct DaemonWriter {
     registered: bool,
     dst_addr: SocketAddr,
     metric_id: usize,
@@ -25,18 +25,18 @@ pub struct InsertWorker {
     tx: Sender<Event>,
 }
 
-impl InsertWorker {
+impl DaemonWriter {
     pub fn new(
         dst_addr: &SocketAddr,
         metric_id: usize,
         num_metrics: usize,
         rate_limit: Option<usize>,
         tx: Sender<Event>,
-    ) -> Result<InsertWorker, io::Error> {
+    ) -> Result<DaemonWriter, io::Error> {
         let dst_addr = dst_addr.clone();
         let addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
         let rate_limiter = RateLimiter::new(rate_limit);
-        let w = InsertWorker {
+        let w = DaemonWriter {
             registered: false,
             dst_addr,
             metric_id,
@@ -78,7 +78,7 @@ impl InsertWorker {
     }
 }
 
-impl Worker for InsertWorker {
+impl Worker for DaemonWriter {
     fn register(&mut self, token: Token, poll: &Poll) -> Result<(), io::Error> {
         if !self.registered {
             self.registered = true;
@@ -101,8 +101,8 @@ impl Worker for InsertWorker {
         if self.num_written == self.buf.len() {
             self.rate_limiter.increment();
             self.tx
-                .send(Event::insert_event())
-                .expect("Could not send insert event");
+                .send(Event::metric_inserted_event())
+                .expect("Could not send insert metric event");
             self.buf.clear();
             self.num_written = 0;
             self.metric_id = (self.metric_id + 1) % self.num_metrics;
@@ -112,6 +112,6 @@ impl Worker for InsertWorker {
     }
 
     fn read(&mut self) -> Result<(), io::Error> {
-        panic!("Insert worker did not register for read events!");
+        panic!("Daemon write worker did not register for read events!");
     }
 }

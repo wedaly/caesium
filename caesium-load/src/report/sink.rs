@@ -2,7 +2,7 @@ use report::summary::StatSummary;
 use time::Duration;
 
 pub trait ReportSink {
-    fn write_insert_rate(&mut self, inserts_per_sec: f64);
+    fn write_insert_rate(&mut self, name: &str, inserts_per_sec: f64);
     fn write_query_duration(&mut self, query_id: usize, summary: StatSummary<Duration>);
 }
 
@@ -15,8 +15,8 @@ impl LogSink {
 }
 
 impl ReportSink for LogSink {
-    fn write_insert_rate(&mut self, inserts_per_sec: f64) {
-        info!("Insert rate {} per second", inserts_per_sec);
+    fn write_insert_rate(&mut self, name: &str, inserts_per_sec: f64) {
+        info!("{} insert rate {} per second", name, inserts_per_sec);
     }
 
     fn write_query_duration(&mut self, query_id: usize, summary: StatSummary<Duration>) {
@@ -53,7 +53,7 @@ impl MemorySink {
 
 #[cfg(test)]
 impl ReportSink for MemorySink {
-    fn write_insert_rate(&mut self, inserts_per_sec: f64) {
+    fn write_insert_rate(&mut self, _name: &str, inserts_per_sec: f64) {
         self.insert_measurements.push(inserts_per_sec)
     }
 

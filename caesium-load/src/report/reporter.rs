@@ -7,7 +7,8 @@ use time::Timespec;
 
 pub struct Reporter {
     rx: Receiver<Event>,
-    insert_tracker: InsertTracker,
+    metric_insert_tracker: InsertTracker,
+    sketch_insert_tracker: InsertTracker,
     query_tracker: QueryTracker,
     sample_interval_sec: u64,
     last_flush_ts: Option<Timespec>,
@@ -16,11 +17,13 @@ pub struct Reporter {
 impl Reporter {
     pub fn new(rx: Receiver<Event>, sample_interval_sec: u64) -> Reporter {
         assert!(sample_interval_sec > 0);
-        let insert_tracker = InsertTracker::new();
+        let metric_insert_tracker = InsertTracker::new("Metric".to_string());
+        let sketch_insert_tracker = InsertTracker::new("Sketch".to_string());
         let query_tracker = QueryTracker::new();
         Reporter {
             rx,
-            insert_tracker,
+            metric_insert_tracker,
+            sketch_insert_tracker,
             query_tracker,
             sample_interval_sec,
             last_flush_ts: None,
@@ -53,14 +56,18 @@ impl Reporter {
 
         if self.is_time_to_flush(event_ts) {
             let mut sink = sink_mutex.lock().expect("Could not acquire lock on sink");
-            self.insert_tracker.flush(&mut *sink);
+            self.metric_insert_tracker.flush(&mut *sink);
+            self.sketch_insert_tracker.flush(&mut *sink);
             self.query_tracker.flush(&mut *sink);
             self.set_last_flush_ts(event_ts);
         }
 
         match event {
-            Event::InsertEvent { event_ts } => {
-                self.insert_tracker.track_insert(event_ts);
+            Event::MetricSentEvent { event_ts } => {
+                self.metric_insert_tracker.track_insert(event_ts);
+            }
+            Event::SketchSentEvent { event_ts } => {
+                self.sketch_insert_tracker.track_insert(event_ts);
             }
             Event::QuerySentEvent {
                 event_ts,
@@ -107,37 +114,37 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn it_flushes_insert_report_at_end_of_interval() {
+    fn it_flushes_metric_inserted_report_at_end_of_interval() {
         let (tx, rx) = channel();
         let r = Reporter::new(rx, 1);
         let sink = Arc::new(Mutex::new(MemorySink::new()));
         let sink_ref = sink.clone();
         let thread = thread::spawn(|| r.run(sink_ref));
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(0, 0),
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(0, 50),
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(1, 0),
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(1, 50),
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(1, 60),
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(1, 70),
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(2, 0),
         })
         .unwrap();
@@ -194,7 +201,7 @@ mod tests {
             query_id: 0,
         })
         .unwrap();
-        tx.send(Event::InsertEvent {
+        tx.send(Event::MetricSentEvent {
             event_ts: Timespec::new(3, 0),
         })
         .unwrap();

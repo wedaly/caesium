@@ -4,9 +4,11 @@ version = "0.1.0"
 authors = ["Will Daly"]
 
 [dependencies]
+caesium-core = { path = "../caesium-core" }
 clap = "2.32.0"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug"] }
 mio = "0.6.15"
 rand = "0.5.4"
 stackdriver_logger = "0.3.0"
 time = "0.1.40"
+uuid = { version = "0.6", features = ["v4"] }

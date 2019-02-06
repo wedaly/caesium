@@ -5,14 +5,16 @@ use std::collections::HashMap;
 use time::{Duration, Timespec};
 
 pub struct InsertTracker {
+    name: String,
     count: u64,
     start_ts: Option<Timespec>,
     end_ts: Option<Timespec>,
 }
 
 impl InsertTracker {
-    pub fn new() -> InsertTracker {
+    pub fn new(name: String) -> InsertTracker {
         InsertTracker {
+            name,
             count: 0,
             start_ts: None,
             end_ts: None,
@@ -39,7 +41,7 @@ impl InsertTracker {
             (Some(start_ts), Some(end_ts)) => {
                 let insert_rate =
                     InsertTracker::calculate_insert_rate(start_ts, end_ts, self.count);
-                sink.write_insert_rate(insert_rate);
+                sink.write_insert_rate(&self.name, insert_rate);
             }
             _ => {}
         }
@@ -108,7 +110,7 @@ mod tests {
     #[test]
     fn it_tracks_insert_rate_no_data() {
         let mut s = MemorySink::new();
-        let mut t = InsertTracker::new();
+        let mut t = InsertTracker::new("Test".to_string());
         t.flush(&mut s);
         assert_eq!(s.get_insert_measurements().len(), 0);
     }
@@ -116,7 +118,7 @@ mod tests {
     #[test]
     fn it_tracks_insert_rate() {
         let mut s = MemorySink::new();
-        let mut t = InsertTracker::new();
+        let mut t = InsertTracker::new("Test".to_string());
         t.track_insert(Timespec::new(0, 0));
         t.track_insert(Timespec::new(2, 0));
         t.track_insert(Timespec::new(3, 0));

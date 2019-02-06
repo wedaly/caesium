@@ -14,7 +14,7 @@ enum State {
     Reading(TcpStream),
 }
 
-pub struct QueryWorker {
+pub struct ServerReader {
     id: usize,
     dst_addr: SocketAddr,
     rate_limiter: RateLimiter,
@@ -24,7 +24,7 @@ pub struct QueryWorker {
     tx: Sender<Event>,
 }
 
-impl QueryWorker {
+impl ServerReader {
     pub fn new(
         id: usize,
         dst_addr: &SocketAddr,
@@ -32,14 +32,14 @@ impl QueryWorker {
         query_idx: usize,
         rate_limit: Option<usize>,
         tx: Sender<Event>,
-    ) -> QueryWorker {
+    ) -> ServerReader {
         assert!(queries_slice.len() > 0);
         assert!(query_idx < queries_slice.len());
         let dst_addr = dst_addr.clone();
         let mut queries = Vec::with_capacity(queries_slice.len());
         queries.extend_from_slice(queries_slice);
         let rate_limiter = RateLimiter::new(rate_limit);
-        QueryWorker {
+        ServerReader {
             id,
             dst_addr,
             queries,
@@ -95,7 +95,7 @@ impl QueryWorker {
     }
 }
 
-impl Worker for QueryWorker {
+impl Worker for ServerReader {
     fn register(&mut self, token: Token, poll: &Poll) -> Result<(), io::Error> {
         self.state = match self.state.take() {
             None => {
@@ -129,7 +129,7 @@ impl Worker for QueryWorker {
             Some(State::Writing(mut s, mut num_written)) => {
                 let query_buf = self.queries[self.query_idx].as_bytes();
                 num_written =
-                    QueryWorker::write_until_done_or_blocked(&mut s, num_written, query_buf)?;
+                    ServerReader::write_until_done_or_blocked(&mut s, num_written, query_buf)?;
                 if num_written < query_buf.len() {
                     Some(State::Writing(s, num_written))
                 } else {
@@ -149,7 +149,7 @@ impl Worker for QueryWorker {
     fn read(&mut self) -> Result<(), io::Error> {
         self.state = match self.state.take() {
             Some(State::Reading(mut s)) => {
-                let is_done = QueryWorker::read_until_done_or_blocked(&mut s)?;
+                let is_done = ServerReader::read_until_done_or_blocked(&mut s)?;
                 self.tx
                     .send(Event::query_bytes_received_event(self.id, self.query_idx))
                     .expect("Could not send query bytes received event to channel");

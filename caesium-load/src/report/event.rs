@@ -1,7 +1,10 @@
 use time::{get_time, Timespec};
 
 pub enum Event {
-    InsertEvent {
+    MetricSentEvent {
+        event_ts: Timespec,
+    },
+    SketchSentEvent {
         event_ts: Timespec,
     },
     QuerySentEvent {
@@ -17,8 +20,14 @@ pub enum Event {
 }
 
 impl Event {
-    pub fn insert_event() -> Event {
-        Event::InsertEvent {
+    pub fn metric_inserted_event() -> Event {
+        Event::MetricSentEvent {
+            event_ts: get_time(),
+        }
+    }
+
+    pub fn sketch_sent_event() -> Event {
+        Event::SketchSentEvent {
             event_ts: get_time(),
         }
     }
@@ -41,7 +50,8 @@ impl Event {
 
     pub fn get_ts(&self) -> Timespec {
         match self {
-            Event::InsertEvent { event_ts } => *event_ts,
+            Event::MetricSentEvent { event_ts } => *event_ts,
+            Event::SketchSentEvent { event_ts } => *event_ts,
             Event::QuerySentEvent {
                 event_ts,
                 worker_id: _,
