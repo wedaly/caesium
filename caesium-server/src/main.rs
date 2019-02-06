@@ -30,8 +30,8 @@ fn main() -> Result<(), Error> {
     let db_ref = Arc::new(db);
     let threads = vec![
         start_downsample_thread(args.downsample_interval, db_ref.clone()),
-        start_read_server_thread(&args.query_addr, args.num_read_workers, db_ref.clone())?,
-        start_write_server_thread(&args.insert_addr, args.num_write_workers, db_ref.clone())?,
+        start_read_server_thread(&args.query_addr, args.num_read_workers, args.query_buffer_len, db_ref.clone())?,
+        start_write_server_thread(&args.insert_addr, args.num_write_workers, args.insert_buffer_len, db_ref.clone())?,
     ];
     for t in threads {
         if let Err(err) = t.join() {
@@ -64,9 +64,10 @@ fn start_downsample_thread(interval: Duration, db_ref: Arc<MetricStore>) -> thre
 fn start_read_server_thread(
     addr: &SocketAddr,
     num_read_workers: usize,
+    buffer_len: usize,
     db_ref: Arc<MetricStore>,
 ) -> Result<thread::JoinHandle<()>, io::Error> {
-    let server = ReadServer::new(addr, num_read_workers, db_ref)?;
+    let server = ReadServer::new(addr, num_read_workers, buffer_len, db_ref)?;
     let thread = thread::spawn(move || {
         if let Err(err) = server.run() {
             error!("Error running read server: {:?}", err);
@@ -78,9 +79,10 @@ fn start_read_server_thread(
 fn start_write_server_thread(
     addr: &SocketAddr,
     num_write_workers: usize,
+    buffer_len: usize,
     db_ref: Arc<MetricStore>,
 ) -> Result<thread::JoinHandle<()>, io::Error> {
-    let server = WriteServer::new(addr, num_write_workers, db_ref)?;
+    let server = WriteServer::new(addr, num_write_workers, buffer_len, db_ref)?;
     let thread = thread::spawn(move || {
         if let Err(err) = server.run() {
             error!("Error running write server: {:?}", err);
@@ -94,6 +96,8 @@ struct Args {
     db_path: String,
     num_read_workers: usize,
     num_write_workers: usize,
+    query_buffer_len: usize,
+    insert_buffer_len: usize,
     query_addr: SocketAddr,
     insert_addr: SocketAddr,
     downsample_interval: Duration,
@@ -115,6 +119,14 @@ fn parse_args() -> Result<Args, Error> {
             .long("num-write-workers")
             .takes_value(true)
             .help("Number of threads to process inserts (default 1)"))
+        .arg(Arg::with_name("QUERY_BUFFER_LEN")
+            .long("query-buffer-len")
+            .takes_value(true)
+            .help("Number of queries to enqueue before blocking (default 4096)"))
+        .arg(Arg::with_name("INSERT_BUFFER_LEN")
+            .long("insert-buffer-len")
+            .takes_value(true)
+            .help("Number of inserts to enqueue before blocking (default 4096)"))
         .arg(Arg::with_name("QUERY_ADDR")
             .long("query-addr")
             .takes_value(true)
@@ -147,6 +159,16 @@ fn parse_args() -> Result<Args, Error> {
         return Err(Error::ArgError("Must have at least one write worker"));
     }
 
+    let query_buffer_len = matches
+        .value_of("QUERY_BUFFER_LEN")
+        .unwrap_or("4096")
+        .parse::<usize>()?;
+
+    let insert_buffer_len = matches
+        .value_of("INSERT_BUFFER_LEN")
+        .unwrap_or("4096")
+        .parse::<usize>()?;
+
     let query_addr = matches
         .value_of("QUERY_ADDR")
         .unwrap_or("127.0.0.1:8000")
@@ -171,6 +193,8 @@ fn parse_args() -> Result<Args, Error> {
         db_path,
         num_read_workers,
         num_write_workers,
+        query_buffer_len,
+        insert_buffer_len,
         query_addr,
         insert_addr,
         downsample_interval,

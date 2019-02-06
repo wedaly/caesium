@@ -6,7 +6,7 @@ use server::write::worker::spawn_worker;
 use slab::Slab;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::{Arc, Mutex};
 use storage::store::MetricStore;
 
@@ -14,7 +14,7 @@ const MAX_NUM_EVENTS: usize = 1024;
 
 pub struct WriteServer {
     listener: TcpListener,
-    tx: Sender<Bytes>,
+    tx: SyncSender<Bytes>,
     connections: Slab<Option<Connection>>,
 }
 
@@ -22,11 +22,12 @@ impl WriteServer {
     pub fn new(
         addr: &SocketAddr,
         num_workers: usize,
+        buffer_len: usize,
         db_ref: Arc<MetricStore>,
     ) -> Result<WriteServer, io::Error> {
         assert!(num_workers > 0);
         let listener = TcpListener::bind(addr)?;
-        let (tx, rx) = channel();
+        let (tx, rx) = sync_channel(buffer_len);
         let rx_ref = Arc::new(Mutex::new(rx));
         for idx in 0..num_workers {
             spawn_worker(idx, rx_ref.clone(), db_ref.clone());
@@ -131,7 +132,7 @@ mod connection {
     use std::io;
     use std::io::Read;
     use std::sync::mpsc::SendError;
-    use std::sync::mpsc::Sender;
+    use std::sync::mpsc::SyncSender;
 
     const INITIAL_BUFSIZE: usize = 4096;
 
@@ -173,7 +174,7 @@ mod connection {
             }
         }
 
-        pub fn output_messages(&mut self, tx: &Sender<Bytes>) -> Result<(), SendError<Bytes>> {
+        pub fn output_messages(&mut self, tx: &SyncSender<Bytes>) -> Result<(), SendError<Bytes>> {
             loop {
                 match self.read_frame() {
                     Some(msg_bytes) => {

@@ -1,24 +1,25 @@
 use server::read::worker::spawn_worker;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::{Arc, Mutex};
 use storage::store::MetricStore;
 
 pub struct ReadServer {
     listener: TcpListener,
-    tx: Sender<TcpStream>,
+    tx: SyncSender<TcpStream>,
 }
 
 impl ReadServer {
     pub fn new(
         addr: &SocketAddr,
         num_workers: usize,
+        buffer_len: usize,
         db_ref: Arc<MetricStore>,
     ) -> Result<ReadServer, io::Error> {
         assert!(num_workers > 0);
         let listener = TcpListener::bind(addr)?;
-        let (tx, rx) = channel();
+        let (tx, rx) = sync_channel(buffer_len);
         let rx_ref = Arc::new(Mutex::new(rx));
         for idx in 0..num_workers {
             spawn_worker(idx, rx_ref.clone(), db_ref.clone())
