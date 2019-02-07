@@ -31,27 +31,27 @@ struct StoredValue {
     highest_rank: usize,
 }
 
-pub struct ReadableSketch {
+pub struct WeightedQuerySketch {
     data: Vec<StoredValue>,
     minmax: MinMax,
     count: usize,
     total_weight: usize,
 }
 
-impl ReadableSketch {
+impl WeightedQuerySketch {
     pub fn new(
         count: usize,
         minmax: MinMax,
         weighted_values: Vec<WeightedValue>,
-    ) -> ReadableSketch {
+    ) -> WeightedQuerySketch {
         debug_assert!(minmax.min().is_some() == (count > 0));
         debug_assert!(minmax.max().is_some() == (count > 0));
 
         // In some cases, total_weight won't equal count due to randomness
         // in the KLL sketch weighted sampler.
         let total_weight = weighted_values.iter().map(|v| v.weight).sum();
-        let data = ReadableSketch::calculate_stored_values(weighted_values);
-        ReadableSketch {
+        let data = WeightedQuerySketch::calculate_stored_values(weighted_values);
+        WeightedQuerySketch {
             count,
             total_weight,
             minmax,
@@ -176,6 +176,33 @@ impl ReadableSketch {
     }
 }
 
+pub struct UnweightedQuerySketch {
+    sorted_data: Vec<u32>
+}
+
+impl UnweightedQuerySketch {
+    pub fn new(sorted_data: Vec<u32>) -> UnweightedQuerySketch {
+        UnweightedQuerySketch{ sorted_data }
+    }
+
+    pub fn query(&self, phi: f64) -> Option<ApproxQuantile> {
+        let n = self.sorted_data.len();
+
+        if n == 0 {
+            return None;
+        }
+
+        let target_rank = (phi * (n as f64)) as usize;
+        let quantile = self.sorted_data[target_rank];
+        Some(ApproxQuantile{
+            count: n,
+            approx_value: quantile,
+            lower_bound: quantile,
+            upper_bound: quantile
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,7 +211,7 @@ mod tests {
 
     #[test]
     fn it_queries_empty() {
-        let s = ReadableSketch::new(0, MinMax::new(), vec![]);
+        let s = WeightedQuerySketch::new(0, MinMax::new(), vec![]);
         assert_eq!(s.query(0.5), None);
     }
 
@@ -248,7 +275,7 @@ mod tests {
         let count = 8;
         let values: Vec<u32> = data.iter().map(|v| v.value).collect();
         let minmax = MinMax::from_values(&values);
-        let s = ReadableSketch::new(count, minmax, data);
+        let s = WeightedQuerySketch::new(count, minmax, data);
         let result = s.query(0.5).expect("Could not query sketch");
         assert_eq!(result.count, count);
     }
@@ -257,7 +284,7 @@ mod tests {
     fn it_calculates_upper_and_lower_bounds_single_value() {
         let data = vec![WeightedValue::new(1, 1)];
         let minmax = MinMax::from_values(&vec![1]);
-        let s = ReadableSketch::new(1, minmax, data);
+        let s = WeightedQuerySketch::new(1, minmax, data);
         let q = s.query(0.5);
         let lower = q.map(|q| q.lower_bound);
         let upper = q.map(|q| q.upper_bound);
@@ -279,7 +306,7 @@ mod tests {
             }
         }
 
-        let s = ReadableSketch::new(count, minmax, data);
+        let s = WeightedQuerySketch::new(count, minmax, data);
         assert_eq!(s.size(), 64); // deduplicate stored values
 
         let q = s.query(0.5);
@@ -296,7 +323,7 @@ mod tests {
         let count = data.iter().map(|v| v.weight).sum();
         let values: Vec<u32> = data.iter().map(|v| v.value).collect();
         let minmax = MinMax::from_values(&values);
-        let s = ReadableSketch::new(count, minmax, data.clone());
+        let s = WeightedQuerySketch::new(count, minmax, data.clone());
         for p in 1..100 {
             let phi = p as f64 / 100.0;
             let expected = calculate_exact(&data, phi);

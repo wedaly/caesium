@@ -3,7 +3,7 @@ mod compactor;
 pub mod error;
 pub mod kll;
 mod minmax;
-pub mod readable;
+pub mod query;
 mod sampler;
 
 pub mod writable {
@@ -12,6 +12,14 @@ pub mod writable {
 
     #[cfg(feature = "baseline")]
     pub use quantile::baseline::BaselineSketch as WritableSketch;
+}
+
+pub mod readable {
+    #[cfg(not(feature = "baseline"))]
+    pub use quantile::query::WeightedQuerySketch as ReadableSketch;
+
+    #[cfg(feature = "baseline")]
+    pub use quantile::query::UnweightedQuerySketch as ReadableSketch;
 }
 
 #[cfg(test)]

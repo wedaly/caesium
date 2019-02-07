@@ -1,7 +1,7 @@
 use encode::delta::{delta_decode, delta_encode};
 use encode::{Decodable, Encodable, EncodableError};
 use quantile::minmax::MinMax;
-use quantile::readable::{ReadableSketch, WeightedValue};
+use quantile::query::UnweightedQuerySketch;
 use std::io::{Read, Write};
 
 #[derive(Clone)]
@@ -33,13 +33,11 @@ impl BaselineSketch {
         self
     }
 
-    pub fn to_readable(self) -> ReadableSketch {
-        let weighted_values: Vec<WeightedValue> = self
-            .data
-            .iter()
-            .map(|v| WeightedValue::new(1, *v))
-            .collect();
-        ReadableSketch::new(self.data.len(), self.minmax, weighted_values)
+    pub fn to_readable(mut self) -> UnweightedQuerySketch {
+        if !self.is_sorted {
+            self.data.sort_unstable();
+        }
+        UnweightedQuerySketch::new(self.data)
     }
 
     pub fn count(&self) -> usize {

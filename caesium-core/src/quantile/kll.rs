@@ -4,7 +4,7 @@
 use encode::{Decodable, Encodable, EncodableError};
 use quantile::compactor::Compactor;
 use quantile::minmax::MinMax;
-use quantile::readable::{ReadableSketch, WeightedValue};
+use quantile::query::{WeightedQuerySketch, WeightedValue};
 use quantile::sampler::Sampler;
 use slab::Slab;
 use std::cmp::min;
@@ -167,7 +167,7 @@ impl KllSketch {
         survivor
     }
 
-    pub fn to_readable(self) -> ReadableSketch {
+    pub fn to_readable(self) -> WeightedQuerySketch {
         let mut data = Vec::with_capacity(self.size + 1);
 
         let sampler_weight = self.sampler.stored_weight();
@@ -184,7 +184,7 @@ impl KllSketch {
             }
         }
 
-        ReadableSketch::new(self.count, self.minmax, data)
+        WeightedQuerySketch::new(self.count, self.minmax, data)
     }
 
     pub fn count(&self) -> usize {

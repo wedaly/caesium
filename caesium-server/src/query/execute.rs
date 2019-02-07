@@ -1,4 +1,4 @@
-use caesium_core::quantile::readable::ApproxQuantile;
+use caesium_core::quantile::query::ApproxQuantile;
 use caesium_core::time::window::TimeWindow;
 use query::build::build_query;
 use query::error::QueryError;
