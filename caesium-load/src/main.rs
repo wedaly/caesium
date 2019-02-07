@@ -65,7 +65,7 @@ fn parse_args() -> Result<Args, Error> {
             Arg::with_name("DAEMON_WRITE_RATE_LIMIT")
                 .long("daemon-write-rate-limit")
                 .takes_value(true)
-                .help("Maximum number of inserts per second per write worker (default 1)"),
+                .help("Maximum number of inserts per second per write worker (default is no limit)"),
         )
         .arg(
             Arg::with_name("SERVER_QUERY_ADDR")
@@ -89,7 +89,7 @@ fn parse_args() -> Result<Args, Error> {
             Arg::with_name("SERVER_QUERY_RATE_LIMIT")
                 .long("server-query-rate-limit")
                 .takes_value(true)
-                .help("Maximum number of queries per second per read worker (default 1)"),
+                .help("Maximum number of queries per second per read worker (default is no limit)"),
         )
         .arg(
             Arg::with_name("SERVER_WRITE_ADDR")
@@ -113,7 +113,7 @@ fn parse_args() -> Result<Args, Error> {
             Arg::with_name("SERVER_WRITE_RATE_LIMIT")
                 .long("server-write-rate-limit")
                 .takes_value(true)
-                .help("Maximum number of sketches to insert per second per worker (default 1)"),
+                .help("Maximum number of sketches to insert per second per worker (default is no limit)"),
         )
         .get_matches();
 
