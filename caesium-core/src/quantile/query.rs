@@ -177,12 +177,12 @@ impl WeightedQuerySketch {
 }
 
 pub struct UnweightedQuerySketch {
-    sorted_data: Vec<u32>
+    sorted_data: Vec<u32>,
 }
 
 impl UnweightedQuerySketch {
     pub fn new(sorted_data: Vec<u32>) -> UnweightedQuerySketch {
-        UnweightedQuerySketch{ sorted_data }
+        UnweightedQuerySketch { sorted_data }
     }
 
     pub fn query(&self, phi: f64) -> Option<ApproxQuantile> {
@@ -194,11 +194,11 @@ impl UnweightedQuerySketch {
 
         let target_rank = (phi * (n as f64)) as usize;
         let quantile = self.sorted_data[target_rank];
-        Some(ApproxQuantile{
+        Some(ApproxQuantile {
             count: n,
             approx_value: quantile,
             lower_bound: quantile,
-            upper_bound: quantile
+            upper_bound: quantile,
         })
     }
 }

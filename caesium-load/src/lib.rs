@@ -159,7 +159,7 @@ fn init_server_writers(
             config.rate_limit,
             &clock,
             tx.clone(),
-        )?;
+        );
         workers.push(Box::new(w));
     }
     Ok(())

@@ -4,16 +4,16 @@ use std::cmp::{max, min};
 use std::collections::HashMap;
 use time::{Duration, Timespec};
 
-pub struct InsertTracker {
+pub struct RateTracker {
     name: String,
     count: u64,
     start_ts: Option<Timespec>,
     end_ts: Option<Timespec>,
 }
 
-impl InsertTracker {
-    pub fn new(name: String) -> InsertTracker {
-        InsertTracker {
+impl RateTracker {
+    pub fn new(name: String) -> RateTracker {
+        RateTracker {
             name,
             count: 0,
             start_ts: None,
@@ -21,7 +21,7 @@ impl InsertTracker {
         }
     }
 
-    pub fn track_insert(&mut self, ts: Timespec) {
+    pub fn track_event(&mut self, ts: Timespec) {
         self.count += 1;
         self.start_ts = match self.start_ts.take() {
             Some(old_ts) => Some(min(ts, old_ts)),
@@ -39,9 +39,8 @@ impl InsertTracker {
     {
         match (self.start_ts, self.end_ts) {
             (Some(start_ts), Some(end_ts)) => {
-                let insert_rate =
-                    InsertTracker::calculate_insert_rate(start_ts, end_ts, self.count);
-                sink.write_insert_rate(&self.name, insert_rate);
+                let insert_rate = RateTracker::calculate_insert_rate(start_ts, end_ts, self.count);
+                sink.write_rate(&self.name, insert_rate);
             }
             _ => {}
         }
@@ -57,6 +56,29 @@ impl InsertTracker {
     fn calculate_insert_rate(start_ts: Timespec, end_ts: Timespec, count: u64) -> f64 {
         let duration_sec: u64 = max((end_ts - start_ts).num_seconds(), 1) as u64;
         (count as f64) / (duration_sec as f64)
+    }
+}
+
+pub struct CountTracker {
+    name: String,
+    count: usize,
+}
+
+impl CountTracker {
+    pub fn new(name: String) -> CountTracker {
+        CountTracker { name, count: 0 }
+    }
+
+    pub fn increment(&mut self) {
+        self.count += 1;
+    }
+
+    pub fn flush<T>(&mut self, sink: &mut T)
+    where
+        T: ReportSink,
+    {
+        sink.write_count(&self.name, self.count);
+        self.count = 0;
     }
 }
 
@@ -110,22 +132,32 @@ mod tests {
     #[test]
     fn it_tracks_insert_rate_no_data() {
         let mut s = MemorySink::new();
-        let mut t = InsertTracker::new("Test".to_string());
+        let mut t = RateTracker::new("Test".to_string());
         t.flush(&mut s);
-        assert_eq!(s.get_insert_measurements().len(), 0);
+        assert_eq!(s.get_rate_measurements().len(), 0);
     }
 
     #[test]
     fn it_tracks_insert_rate() {
         let mut s = MemorySink::new();
-        let mut t = InsertTracker::new("Test".to_string());
-        t.track_insert(Timespec::new(0, 0));
-        t.track_insert(Timespec::new(2, 0));
-        t.track_insert(Timespec::new(3, 0));
-        t.track_insert(Timespec::new(4, 0));
-        t.track_insert(Timespec::new(5, 0));
+        let mut t = RateTracker::new("Test".to_string());
+        t.track_event(Timespec::new(0, 0));
+        t.track_event(Timespec::new(2, 0));
+        t.track_event(Timespec::new(3, 0));
+        t.track_event(Timespec::new(4, 0));
+        t.track_event(Timespec::new(5, 0));
         t.flush(&mut s);
-        assert_eq!(s.get_insert_measurements(), &[1.0f64]);
+        assert_eq!(s.get_rate_measurements(), &[1.0f64]);
+    }
+
+    #[test]
+    fn it_tracks_counts() {
+        let mut s = MemorySink::new();
+        let mut t = CountTracker::new("Test".to_string());
+        t.increment();
+        t.increment();
+        t.flush(&mut s);
+        assert_eq!(s.get_count_measurements(), &[2]);
     }
 
     #[test]

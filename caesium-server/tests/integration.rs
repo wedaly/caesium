@@ -163,15 +163,15 @@ fn start_server() -> (SocketAddr, SocketAddr, String) {
     let db = MetricStore::open(&db_path).expect("Could not open db");
     let db_ref = Arc::new(db);
 
-    let write_server =
-        WriteServer::new(&server_addr, 1, 4096, db_ref.clone()).expect("Could not start write server");
+    let write_server = WriteServer::new(&server_addr, 1, 4096, db_ref.clone())
+        .expect("Could not start write server");
     let write_addr = write_server
         .local_addr()
         .expect("Could not retrieve write server addr");
     thread::spawn(move || write_server.run());
 
-    let read_server =
-        ReadServer::new(&server_addr, 1, 4096, db_ref.clone()).expect("Could not start read server");
+    let read_server = ReadServer::new(&server_addr, 1, 4096, db_ref.clone())
+        .expect("Could not start read server");
     let read_addr = read_server
         .local_addr()
         .expect("Could not retrieve read server address");

@@ -30,8 +30,18 @@ fn main() -> Result<(), Error> {
     let db_ref = Arc::new(db);
     let threads = vec![
         start_downsample_thread(args.downsample_interval, db_ref.clone()),
-        start_read_server_thread(&args.query_addr, args.num_read_workers, args.query_buffer_len, db_ref.clone())?,
-        start_write_server_thread(&args.insert_addr, args.num_write_workers, args.insert_buffer_len, db_ref.clone())?,
+        start_read_server_thread(
+            &args.query_addr,
+            args.num_read_workers,
+            args.query_buffer_len,
+            db_ref.clone(),
+        )?,
+        start_write_server_thread(
+            &args.insert_addr,
+            args.num_write_workers,
+            args.insert_buffer_len,
+            db_ref.clone(),
+        )?,
     ];
     for t in threads {
         if let Err(err) = t.join() {

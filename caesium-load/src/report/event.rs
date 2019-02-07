@@ -7,6 +7,9 @@ pub enum Event {
     SketchSentEvent {
         event_ts: Timespec,
     },
+    ErrorEvent {
+        event_ts: Timespec,
+    },
     QuerySentEvent {
         event_ts: Timespec,
         worker_id: usize,
@@ -32,6 +35,12 @@ impl Event {
         }
     }
 
+    pub fn error_event() -> Event {
+        Event::ErrorEvent {
+            event_ts: get_time(),
+        }
+    }
+
     pub fn query_sent_event(worker_id: usize, query_id: usize) -> Event {
         Event::QuerySentEvent {
             event_ts: get_time(),
@@ -52,6 +61,7 @@ impl Event {
         match self {
             Event::MetricSentEvent { event_ts } => *event_ts,
             Event::SketchSentEvent { event_ts } => *event_ts,
+            Event::ErrorEvent { event_ts } => *event_ts,
             Event::QuerySentEvent {
                 event_ts,
                 worker_id: _,

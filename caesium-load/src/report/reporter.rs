@@ -1,14 +1,15 @@
 use report::event::Event;
 use report::sink::ReportSink;
-use report::tracker::{InsertTracker, QueryTracker};
+use report::tracker::{CountTracker, QueryTracker, RateTracker};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use time::Timespec;
 
 pub struct Reporter {
     rx: Receiver<Event>,
-    metric_insert_tracker: InsertTracker,
-    sketch_insert_tracker: InsertTracker,
+    metric_insert_tracker: RateTracker,
+    sketch_insert_tracker: RateTracker,
+    error_tracker: CountTracker,
     query_tracker: QueryTracker,
     sample_interval_sec: u64,
     last_flush_ts: Option<Timespec>,
@@ -17,13 +18,15 @@ pub struct Reporter {
 impl Reporter {
     pub fn new(rx: Receiver<Event>, sample_interval_sec: u64) -> Reporter {
         assert!(sample_interval_sec > 0);
-        let metric_insert_tracker = InsertTracker::new("Metric".to_string());
-        let sketch_insert_tracker = InsertTracker::new("Sketch".to_string());
+        let metric_insert_tracker = RateTracker::new("Metric".to_string());
+        let sketch_insert_tracker = RateTracker::new("Sketch".to_string());
+        let error_tracker = CountTracker::new("Error".to_string());
         let query_tracker = QueryTracker::new();
         Reporter {
             rx,
             metric_insert_tracker,
             sketch_insert_tracker,
+            error_tracker,
             query_tracker,
             sample_interval_sec,
             last_flush_ts: None,
@@ -58,16 +61,20 @@ impl Reporter {
             let mut sink = sink_mutex.lock().expect("Could not acquire lock on sink");
             self.metric_insert_tracker.flush(&mut *sink);
             self.sketch_insert_tracker.flush(&mut *sink);
+            self.error_tracker.flush(&mut *sink);
             self.query_tracker.flush(&mut *sink);
             self.set_last_flush_ts(event_ts);
         }
 
         match event {
             Event::MetricSentEvent { event_ts } => {
-                self.metric_insert_tracker.track_insert(event_ts);
+                self.metric_insert_tracker.track_event(event_ts);
             }
             Event::SketchSentEvent { event_ts } => {
-                self.sketch_insert_tracker.track_insert(event_ts);
+                self.sketch_insert_tracker.track_event(event_ts);
+            }
+            Event::ErrorEvent { event_ts: _ } => {
+                self.error_tracker.increment();
             }
             Event::QuerySentEvent {
                 event_ts,
@@ -153,7 +160,7 @@ mod tests {
 
         {
             let s = sink.lock().expect("Could not acquire lock on sink");
-            let measurements = s.get_insert_measurements();
+            let measurements = s.get_rate_measurements();
             assert_eq!(measurements, &[2.0f64, 4.0f64]);
         }
     }
