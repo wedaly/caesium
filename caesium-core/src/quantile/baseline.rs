@@ -1,6 +1,5 @@
 use encode::delta::{delta_decode, delta_encode};
 use encode::{Decodable, Encodable, EncodableError};
-use quantile::minmax::MinMax;
 use quantile::query::UnweightedQuerySketch;
 use std::io::{Read, Write};
 
@@ -8,7 +7,6 @@ use std::io::{Read, Write};
 pub struct BaselineSketch {
     is_sorted: bool,
     data: Vec<u32>,
-    minmax: MinMax,
 }
 
 impl BaselineSketch {
@@ -16,20 +14,17 @@ impl BaselineSketch {
         BaselineSketch {
             is_sorted: true,
             data: Vec::new(),
-            minmax: MinMax::new(),
         }
     }
 
     pub fn insert(&mut self, val: u32) {
         self.is_sorted = false;
-        self.minmax.update(val);
         self.data.push(val);
     }
 
     pub fn merge(mut self, other: BaselineSketch) -> BaselineSketch {
         self.is_sorted = false;
         self.data.extend_from_slice(&other.data);
-        self.minmax.update_from_other(&other.minmax);
         self
     }
 
@@ -62,7 +57,6 @@ where
             tmp.sort_unstable();
             &tmp
         };
-        self.minmax.encode(writer)?;
         delta_encode(&data, writer)?;
         Ok(())
     }
@@ -73,12 +67,10 @@ where
     R: Read,
 {
     fn decode(reader: &mut R) -> Result<BaselineSketch, EncodableError> {
-        let minmax = MinMax::decode(reader)?;
         let data = delta_decode(reader)?;
         Ok(BaselineSketch {
             is_sorted: true,
             data,
-            minmax,
         })
     }
 }
