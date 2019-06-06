@@ -3,6 +3,8 @@ Caesium
 
 Experimental system for application monitoring, so named because: caesium is an element used in atomic clocks; clocks are used to measure application response times; this system monitors application response times.
 
+For (many) more details, please see [my master's thesis](http://hairy-coo.com/publications/daly-thesis-2019.pdf)!
+
 Getting Started
 ---------------
 
